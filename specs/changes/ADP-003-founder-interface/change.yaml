@@ -1,0 +1,42 @@
+schema_version: 1
+id: ADP-003
+title: Founder Interface and ChatGPT Action Boundary
+type: interface-security
+status: implementing
+risk: R3
+origin:
+  type: founder_request
+  issue: 6
+authority:
+  decision_owner: founder
+  implementation_mode: governed
+  founder_approval_required_before_merge: false
+scope:
+  in_scope:
+    - dedicated_founder_interface_credential
+    - route_level_least_privilege_authorization
+    - platform_status_read
+    - project_status_read
+    - founder_request_creation
+    - openapi_action_schema
+    - remote_https_deployment_contract
+  out_of_scope:
+    - r4_decisions_through_founder_interface
+    - change_contract_authoring_through_founder_interface
+    - task_or_workflow_execution
+    - capability_changes
+    - mcp_write_integration
+    - autonomous_worker_dispatch
+    - automatic_merge
+    - production_release
+activation:
+  current_level: A1
+  resulting_level: A1
+  capabilities_enabled_by_this_change: []
+implementation:
+  branch: change/ADP-003-founder-interface
+  issue: 6
+artifacts:
+  specification: specification.md
+  acceptance_criteria: acceptance-criteria.md
+  implementation_plan: implementation-plan.md
