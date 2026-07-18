@@ -83,3 +83,6 @@ jobs:
 
       - name: Verify PostgreSQL foundation invariants
         run: npm run verify:postgres
+
+      - name: Verify durable work queue and execution leases
+        run: npm run verify:queue
