@@ -86,3 +86,6 @@ jobs:
 
       - name: Verify durable work queue and execution leases
         run: npm run verify:queue
+
+      - name: Verify freshness and continuing authority
+        run: npm run verify:freshness
