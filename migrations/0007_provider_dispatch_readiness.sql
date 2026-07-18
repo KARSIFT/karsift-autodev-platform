@@ -1,3 +1,20 @@
+CREATE TABLE IF NOT EXISTS ai_provider_routing_policies (
+    project_id uuid NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
+    execution_class text NOT NULL CHECK (execution_class IN (
+        'AI_TIER_1', 'AI_TIER_2', 'AI_TIER_3', 'AI_TIER_4'
+    )),
+    capability text NOT NULL CHECK (capability IN ('CODE_BUILDER', 'CODE_REVIEWER')),
+    provider_keys text[] NOT NULL,
+    enabled boolean NOT NULL DEFAULT true,
+    version integer NOT NULL DEFAULT 1 CHECK (version > 0),
+    updated_by text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(project_id, execution_class, capability),
+    CHECK (cardinality(provider_keys) BETWEEN 1 AND 10),
+    CHECK (array_position(provider_keys, NULL) IS NULL)
+);
+
 CREATE TABLE IF NOT EXISTS ai_provider_capacity_observations (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id uuid NOT NULL REFERENCES projects(id) ON DELETE RESTRICT,
@@ -30,7 +47,10 @@ CREATE TABLE IF NOT EXISTS ai_provider_dispatch_decisions (
     work_queue_item_id uuid NOT NULL,
     queue_state_version integer NOT NULL CHECK (queue_state_version >= 0),
     ai_budget_decision_id uuid NOT NULL,
-    provider_key text NOT NULL CHECK (provider_key ~ '^[a-z0-9][a-z0-9._-]{1,63}$'),
+    routing_policy_version integer NOT NULL CHECK (routing_policy_version >= 0),
+    candidate_provider_keys text[] NOT NULL DEFAULT '{}'::text[],
+    provider_key text CHECK (provider_key ~ '^[a-z0-9][a-z0-9._-]{1,63}$'),
+    selected_provider_rank integer CHECK (selected_provider_rank > 0),
     capability text NOT NULL CHECK (capability IN ('CODE_BUILDER', 'CODE_REVIEWER')),
     capacity_observation_id uuid,
     outcome text NOT NULL CHECK (outcome IN ('READY', 'WAIT')),
@@ -39,6 +59,7 @@ CREATE TABLE IF NOT EXISTS ai_provider_dispatch_decisions (
     )),
     reason_code text NOT NULL CHECK (reason_code IN (
         'PROVIDER_READY',
+        'PROVIDER_ROUTING_POLICY_MISSING',
         'PROVIDER_OBSERVATION_MISSING',
         'PROVIDER_OBSERVATION_STALE',
         'PROVIDER_QUOTA_EXHAUSTED',
@@ -55,8 +76,17 @@ CREATE TABLE IF NOT EXISTS ai_provider_dispatch_decisions (
     FOREIGN KEY(capacity_observation_id, project_id)
         REFERENCES ai_provider_capacity_observations(id, project_id) ON DELETE RESTRICT,
     CHECK (
-        (outcome = 'READY' AND waiting_reason = 'NONE' AND capacity_observation_id IS NOT NULL)
-        OR outcome = 'WAIT'
+        (outcome = 'READY'
+            AND waiting_reason = 'NONE'
+            AND provider_key IS NOT NULL
+            AND selected_provider_rank IS NOT NULL
+            AND capacity_observation_id IS NOT NULL)
+        OR
+        (outcome = 'WAIT' AND waiting_reason <> 'NONE')
+    ),
+    CHECK (
+        selected_provider_rank IS NULL
+        OR selected_provider_rank <= cardinality(candidate_provider_keys)
     )
 );
 
@@ -104,6 +134,7 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     budget_class text;
+    expected_dispatch_id uuid;
     dispatch record;
 BEGIN
     SELECT execution_class
@@ -127,12 +158,27 @@ BEGIN
         RAISE EXCEPTION 'Provider dispatch conflict: AI work requires provider dispatch evidence';
     END IF;
 
+    SELECT dispatch_decision.id
+      INTO expected_dispatch_id
+      FROM ai_provider_dispatch_decisions dispatch_decision
+     WHERE dispatch_decision.project_id = NEW.project_id
+       AND dispatch_decision.work_queue_item_id = NEW.work_queue_item_id
+       AND dispatch_decision.queue_state_version = NEW.claim_queue_state_version
+       AND dispatch_decision.ai_budget_decision_id = NEW.ai_budget_decision_id
+       AND dispatch_decision.capability = 'CODE_BUILDER'
+     ORDER BY dispatch_decision.created_at DESC, dispatch_decision.id DESC
+     LIMIT 1;
+
+    IF expected_dispatch_id IS NULL OR expected_dispatch_id <> NEW.provider_dispatch_decision_id THEN
+        RAISE EXCEPTION 'Provider dispatch conflict: execution attempt does not reference the latest exact-state dispatch decision';
+    END IF;
+
     SELECT dispatch_decision.*,
            observation.status AS observation_status,
            observation.expires_at AS observation_expires_at
       INTO dispatch
       FROM ai_provider_dispatch_decisions dispatch_decision
-      JOIN ai_provider_capacity_observations observation
+      LEFT JOIN ai_provider_capacity_observations observation
         ON observation.id = dispatch_decision.capacity_observation_id
        AND observation.project_id = dispatch_decision.project_id
      WHERE dispatch_decision.id = NEW.provider_dispatch_decision_id
@@ -145,6 +191,10 @@ BEGIN
     IF dispatch.id IS NULL
        OR dispatch.outcome <> 'READY'
        OR dispatch.waiting_reason <> 'NONE'
+       OR dispatch.provider_key IS NULL
+       OR dispatch.selected_provider_rank IS NULL
+       OR dispatch.capacity_observation_id IS NULL
+       OR dispatch.provider_key <> dispatch.candidate_provider_keys[dispatch.selected_provider_rank]
        OR dispatch.observation_status <> 'HEALTHY'
        OR dispatch.observation_expires_at <= now() THEN
         RAISE EXCEPTION 'Provider dispatch conflict: AI work does not have fresh READY provider capacity';
