@@ -1,0 +1,65 @@
+schema_version: 1
+
+id: ADP-001
+title: Repository and Control Plane Foundation
+type: platform-foundation
+status: implementing
+risk: R3
+
+bootstrap_mode: true
+
+origin:
+  type: founder_request
+  issue: 1
+
+authority:
+  decision_owner: founder
+  implementation_mode: founder-directed-bootstrap
+  founder_approval_required_before_merge: true
+
+scope:
+  in_scope:
+    - repository-wide agent operating rules
+    - reusable platform charter
+    - ADP change-package baseline
+    - minimum Control Plane foundation specification
+    - acceptance criteria for the first implementation slice
+  out_of_scope:
+    - autonomous Codex execution
+    - automated Claude verification
+    - automatic merge
+    - preview deployment
+    - staging deployment
+    - production deployment
+    - autonomous production release
+    - autonomous incident repair
+    - product-specific application features
+
+implementation:
+  required: true
+  branch: change/ADP-001-repository-foundation
+  pull_request: null
+
+activation:
+  current_level: BOOTSTRAP
+  capabilities_enabled_by_this_change: []
+  capabilities_remaining_disabled:
+    - autonomous_worker_dispatch
+    - automatic_merge
+    - autonomous_merge
+    - preview_deployment
+    - staging_deployment
+    - production_deployment
+    - autonomous_production_release
+    - autonomous_incident_repair
+
+artifacts:
+  specification: specification.md
+  acceptance_criteria: acceptance-criteria.md
+  implementation_plan: implementation-plan.md
+
+traceability:
+  related_vocanova_baseline:
+    - DOC-17
+    - DOC-18
+    - A-003
