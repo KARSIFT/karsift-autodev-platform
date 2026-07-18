@@ -42,6 +42,7 @@ try {
     "schema_migrations",
     "tasks",
     "work_queue_items",
+    "work_validation_runs",
     "workflow_runs",
   ].sort();
 
@@ -67,6 +68,7 @@ try {
     [
       "0001_control_plane_foundation.sql",
       "0002_work_queue_execution_leases.sql",
+      "0003_work_freshness_validation.sql",
     ],
     "all foundation migrations must be recorded exactly once",
   );
