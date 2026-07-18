@@ -1,9 +1,4 @@
-import type {
-  IncomingMessage,
-  RequestListener,
-  Server,
-  ServerResponse,
-} from "node:http";
+import type { IncomingMessage, Server, ServerResponse } from "node:http";
 
 import type { AppConfig } from "../config.js";
 import { authenticateBearerToken } from "../security/auth.js";
@@ -11,6 +6,11 @@ import type { ContractAuthorizationStore } from "../store/contract-authorization
 
 const MAX_BODY_BYTES = 1_000_000;
 const AUTHORIZATION_PATH = /^\/v1\/change-contracts\/([^/]+)\/authorization-decisions$/;
+
+type RequestHandler = (
+  request: IncomingMessage,
+  response: ServerResponse,
+) => void;
 
 async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
@@ -47,7 +47,7 @@ export function attachContractAuthorizationRoute(
   config: AppConfig,
   store: ContractAuthorizationStore,
 ): void {
-  const existingListeners = server.listeners("request") as RequestListener[];
+  const existingListeners = server.listeners("request") as unknown as RequestHandler[];
   server.removeAllListeners("request");
 
   server.on("request", (request, response) => {
@@ -100,7 +100,11 @@ export function attachContractAuthorizationRoute(
         }
 
         const rationale = body.rationale;
-        if (rationale !== undefined && rationale !== null && typeof rationale !== "string") {
+        if (
+          rationale !== undefined &&
+          rationale !== null &&
+          typeof rationale !== "string"
+        ) {
           sendJson(response, 400, {
             error: "bad_request",
             message: "rationale must be a string when provided",
