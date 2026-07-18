@@ -12,6 +12,7 @@
     "test": "npm run build && node --test \"dist/**/*.test.js\"",
     "start": "node dist/main.js",
     "migrate": "node dist/db/migrate.js",
+    "verify:postgres": "node scripts/verify-postgres-foundation.mjs",
     "check": "npm run build && npm test"
   },
   "dependencies": {
