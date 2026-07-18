@@ -1,0 +1,40 @@
+id: ADP-002
+title: Executable Control Plane Foundation
+status: IMPLEMENTED_CANDIDATE
+risk: R3
+issue: 3
+branch: change/ADP-002-control-plane-foundation
+base: develop
+activation_before: A0
+activation_after: A1
+autonomous_capabilities_activated: []
+in_scope:
+  - typescript_node_control_plane
+  - postgresql_workflow_state
+  - project_registry
+  - founder_requests
+  - decisions
+  - immutable_change_contract_versions
+  - tasks
+  - workflow_runs
+  - audit_events
+  - persistent_kill_switches
+  - authenticated_internal_api
+  - deterministic_domain_tests
+  - provider_neutral_worker_interface
+out_of_scope:
+  - codex_dispatch
+  - claude_verification
+  - automatic_merge
+  - deployment_automation
+  - production_release
+  - incident_repair
+runtime:
+  node: 24.18.0
+  postgresql: 18.4
+dependencies:
+  pg: 8.22.0
+dev_dependencies:
+  typescript: 7.0.2
+  "@types/node": 24.13.3
+  "@types/pg": 8.20.0
