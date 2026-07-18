@@ -8,11 +8,17 @@ import type {
   UpsertAiBudgetPolicyInput,
 } from "./ai-budget-types.js";
 import { PostgresBudgetAwareLeaseStore } from "./budget-aware-lease-store.js";
+import { PostgresBuilderDispatchStore } from "./builder-dispatch-store.js";
 import { PostgresBuilderRuntimeStore } from "./builder-runtime-store.js";
 import type {
+  AcquireBuilderDispatchClaimInput,
+  BuilderDispatchStore,
   BuilderRuntimeStore,
+  CompleteBuilderDispatchClaimInput,
   CompleteBuilderInvocationInput,
+  HeartbeatBuilderDispatchClaimInput,
   PrepareBuilderInvocationInput,
+  ReleaseBuilderDispatchClaimInput,
   StartBuilderInvocationInput,
 } from "./builder-runtime-types.js";
 import { PostgresContractAuthorizationStore } from "./contract-authorization-store.js";
@@ -58,7 +64,8 @@ export class ExtendedPostgresControlPlaneStore
     AiBudgetStore,
     ProviderDispatchStore,
     TaskContextPackStore,
-    BuilderRuntimeStore
+    BuilderRuntimeStore,
+    BuilderDispatchStore
 {
   private readonly workQueue: PostgresWorkQueueStore;
   private readonly budgetAwareLease: PostgresBudgetAwareLeaseStore;
@@ -68,6 +75,7 @@ export class ExtendedPostgresControlPlaneStore
   private readonly providerDispatch: PostgresProviderDispatchStore;
   private readonly taskContextPack: PostgresTaskContextPackStore;
   private readonly builderRuntime: PostgresBuilderRuntimeStore;
+  private readonly builderDispatch: PostgresBuilderDispatchStore;
 
   public constructor(pool: Pool) {
     super(pool);
@@ -79,6 +87,7 @@ export class ExtendedPostgresControlPlaneStore
     this.providerDispatch = new PostgresProviderDispatchStore(pool);
     this.taskContextPack = new PostgresTaskContextPackStore(pool);
     this.builderRuntime = new PostgresBuilderRuntimeStore(pool);
+    this.builderDispatch = new PostgresBuilderDispatchStore(pool);
   }
 
   public createWorkQueueItem(input: CreateWorkQueueItemInput) {
@@ -221,6 +230,30 @@ export class ExtendedPostgresControlPlaneStore
     return this.builderRuntime.getPlatformBuilderRuntimeStatus();
   }
 
+  public acquireBuilderDispatchClaim(input: AcquireBuilderDispatchClaimInput) {
+    return this.builderDispatch.acquireBuilderDispatchClaim(input);
+  }
+
+  public heartbeatBuilderDispatchClaim(input: HeartbeatBuilderDispatchClaimInput) {
+    return this.builderDispatch.heartbeatBuilderDispatchClaim(input);
+  }
+
+  public releaseBuilderDispatchClaim(input: ReleaseBuilderDispatchClaimInput) {
+    return this.builderDispatch.releaseBuilderDispatchClaim(input);
+  }
+
+  public completeBuilderDispatchClaim(input: CompleteBuilderDispatchClaimInput) {
+    return this.builderDispatch.completeBuilderDispatchClaim(input);
+  }
+
+  public getProjectBuilderDispatchStatus(projectId: string) {
+    return this.builderDispatch.getProjectBuilderDispatchStatus(projectId);
+  }
+
+  public getPlatformBuilderDispatchStatus() {
+    return this.builderDispatch.getPlatformBuilderDispatchStatus();
+  }
+
   public override async getProjectStatus(projectId: string) {
     const [
       base,
@@ -231,6 +264,7 @@ export class ExtendedPostgresControlPlaneStore
       providerDispatch,
       contextPacks,
       builderRuntime,
+      builderDispatch,
     ] = await Promise.all([
       super.getProjectStatus(projectId),
       this.workQueue.getProjectQueueStatus(projectId),
@@ -240,6 +274,7 @@ export class ExtendedPostgresControlPlaneStore
       this.providerDispatch.getProjectProviderDispatchStatus(projectId),
       this.taskContextPack.getProjectTaskContextPackStatus(projectId),
       this.builderRuntime.getProjectBuilderRuntimeStatus(projectId),
+      this.builderDispatch.getProjectBuilderDispatchStatus(projectId),
     ]);
     return {
       ...base,
@@ -250,6 +285,7 @@ export class ExtendedPostgresControlPlaneStore
       ...providerDispatch,
       ...contextPacks,
       ...builderRuntime,
+      ...builderDispatch,
     };
   }
 
@@ -263,6 +299,7 @@ export class ExtendedPostgresControlPlaneStore
       providerDispatch,
       contextPacks,
       builderRuntime,
+      builderDispatch,
     ] = await Promise.all([
       super.getPlatformStatus(),
       this.workQueue.getPlatformQueueStatus(),
@@ -272,6 +309,7 @@ export class ExtendedPostgresControlPlaneStore
       this.providerDispatch.getPlatformProviderDispatchStatus(),
       this.taskContextPack.getPlatformTaskContextPackStatus(),
       this.builderRuntime.getPlatformBuilderRuntimeStatus(),
+      this.builderDispatch.getPlatformBuilderDispatchStatus(),
     ]);
     return {
       ...base,
@@ -282,6 +320,7 @@ export class ExtendedPostgresControlPlaneStore
       ...providerDispatch,
       ...contextPacks,
       ...builderRuntime,
+      ...builderDispatch,
     };
   }
 }
