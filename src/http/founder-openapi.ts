@@ -1,0 +1,110 @@
+export function createFounderOpenApiDocument(publicBaseUrl: string) {
+  return {
+    openapi: "3.1.0",
+    info: {
+      title: "KARSIFT Autodev Founder Interface",
+      version: "0.1.0",
+      description:
+        "Least-privilege A1 interface for reading Control Plane status and submitting founder requests. It cannot execute tasks, change capabilities, record decisions, or deploy software.",
+    },
+    servers: [{ url: publicBaseUrl }],
+    security: [{ bearerAuth: [] }],
+    paths: {
+      "/v1/status": {
+        get: {
+          operationId: "getPlatformStatus",
+          summary: "Get the current Autodev platform status",
+          responses: {
+            "200": {
+              description: "Current platform status",
+              content: {
+                "application/json": {
+                  schema: { type: "object", additionalProperties: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/v1/projects/{projectId}/status": {
+        get: {
+          operationId: "getProjectStatus",
+          summary: "Get governed status for one managed project",
+          parameters: [
+            {
+              name: "projectId",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Current project status",
+              content: {
+                "application/json": {
+                  schema: { type: "object", additionalProperties: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/v1/projects/{projectId}/requests": {
+        post: {
+          operationId: "createFounderRequest",
+          summary: "Record a new founder request for a managed project",
+          description:
+            "Creates a durable founder request only. It does not authorize implementation or dispatch an AI worker.",
+          parameters: [
+            {
+              name: "projectId",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["title", "body"],
+                  additionalProperties: false,
+                  properties: {
+                    title: { type: "string", maxLength: 300 },
+                    body: { type: "string", maxLength: 100000 },
+                    authorityContext: {
+                      type: "object",
+                      additionalProperties: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Founder request recorded",
+              content: {
+                "application/json": {
+                  schema: { type: "object", additionalProperties: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "API key",
+        },
+      },
+    },
+  } as const;
+}

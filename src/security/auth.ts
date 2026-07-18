@@ -1,14 +1,21 @@
 import { timingSafeEqual } from "node:crypto";
 
+export type AuthCredentialKind =
+  | "FOUNDER"
+  | "INTERNAL"
+  | "FOUNDER_INTERFACE";
+
 export interface AuthPrincipal {
   readonly type: "FOUNDER" | "SYSTEM";
   readonly id: string;
+  readonly credentialKind: AuthCredentialKind;
 }
 
 export interface AuthCredentials {
   readonly internalApiToken: string;
   readonly internalServiceId: string;
   readonly founderApiToken: string;
+  readonly founderInterfaceApiToken: string;
   readonly founderId: string;
 }
 
@@ -46,11 +53,27 @@ export function authenticateBearerToken(
   const token = parseBearerToken(header);
 
   if (secureTokenEquals(token, credentials.founderApiToken)) {
-    return { type: "FOUNDER", id: credentials.founderId };
+    return {
+      type: "FOUNDER",
+      id: credentials.founderId,
+      credentialKind: "FOUNDER",
+    };
+  }
+
+  if (secureTokenEquals(token, credentials.founderInterfaceApiToken)) {
+    return {
+      type: "FOUNDER",
+      id: credentials.founderId,
+      credentialKind: "FOUNDER_INTERFACE",
+    };
   }
 
   if (secureTokenEquals(token, credentials.internalApiToken)) {
-    return { type: "SYSTEM", id: credentials.internalServiceId };
+    return {
+      type: "SYSTEM",
+      id: credentials.internalServiceId,
+      credentialKind: "INTERNAL",
+    };
   }
 
   return null;

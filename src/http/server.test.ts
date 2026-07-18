@@ -99,9 +99,12 @@ class FakeStore implements ControlPlaneStore {
 const config: AppConfig = {
   host: "127.0.0.1",
   port: 0,
+  publicBaseUrl: "https://control.example.com",
   internalApiToken: "internal-token-that-is-at-least-32-characters",
   internalServiceId: "control-plane",
   founderApiToken: "founder-token-that-is-at-least-32-characters!",
+  founderInterfaceApiToken:
+    "founder-interface-token-that-is-at-least-32-characters",
   founderId: "founder-1",
   databaseUrl: "postgres://unused",
 };
@@ -184,5 +187,116 @@ test("founder token records R4 decisions with founder authority", async () => {
     assert.equal(response.status, 201);
     assert.equal(store.lastDecision?.actor.type, "FOUNDER");
     assert.equal(store.lastDecision?.actor.id, "founder-1");
+  });
+});
+
+test("OpenAPI document is self-describing and does not require authentication", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/openapi.json`);
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as {
+      servers: Array<{ url: string }>;
+      paths: Record<string, unknown>;
+    };
+    assert.deepEqual(body.servers, [{ url: config.publicBaseUrl }]);
+    assert.deepEqual(Object.keys(body.paths).sort(), [
+      "/v1/projects/{projectId}/requests",
+      "/v1/projects/{projectId}/status",
+      "/v1/status",
+    ]);
+  });
+});
+
+test("founder interface token can read platform and project status", async () => {
+  await withServer(async (baseUrl) => {
+    const headers = {
+      authorization: `Bearer ${config.founderInterfaceApiToken}`,
+    };
+
+    const platformResponse = await fetch(`${baseUrl}/v1/status`, { headers });
+    assert.equal(platformResponse.status, 200);
+
+    const projectResponse = await fetch(
+      `${baseUrl}/v1/projects/project-1/status`,
+      { headers },
+    );
+    assert.equal(projectResponse.status, 200);
+  });
+});
+
+test("founder interface token can create a durable founder request", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(
+      `${baseUrl}/v1/projects/project-1/requests`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${config.founderInterfaceApiToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          title: "Build the next governed slice",
+          body: "Please record this request without executing it.",
+        }),
+      },
+    );
+
+    assert.equal(response.status, 201);
+  });
+});
+
+test("founder interface token is blocked from execution and governance routes", async () => {
+  await withServer(async (baseUrl, store) => {
+    const headers = {
+      authorization: `Bearer ${config.founderInterfaceApiToken}`,
+      "content-type": "application/json",
+    };
+
+    const attempts = [
+      ["/v1/projects", { slug: "x", name: "x", repositoryFullName: "KARSIFT/x" }],
+      [
+        "/v1/projects/project-1/decisions",
+        { decisionType: "STRATEGY", summary: "No", authorityLevel: "R4" },
+      ],
+      [
+        "/v1/projects/project-1/change-contracts",
+        { stableId: "ADP-X", content: {} },
+      ],
+      [
+        "/v1/change-contracts/contract-1/versions",
+        { content: {} },
+      ],
+      [
+        "/v1/projects/project-1/tasks",
+        {
+          changeContractVersionId: "version-1",
+          title: "Task",
+          description: "Task",
+        },
+      ],
+      [
+        "/v1/projects/project-1/workflow-runs",
+        { workflowType: "BUILD" },
+      ],
+      [
+        "/v1/workflow-runs/run-1/transition",
+        { expectedStateVersion: 0, targetStatus: "RUNNING" },
+      ],
+      [
+        "/v1/capabilities/AI_DISPATCH/disable",
+        { reason: "Not allowed through founder interface" },
+      ],
+    ] as const;
+
+    for (const [path, body] of attempts) {
+      const response = await fetch(`${baseUrl}${path}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 403, path);
+    }
+
+    assert.equal(store.lastDecision, null);
   });
 });
