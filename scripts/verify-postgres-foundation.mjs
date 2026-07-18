@@ -33,6 +33,7 @@ try {
   const expectedTables = [
     "audit_events",
     "capability_switches",
+    "change_contract_authorization_decisions",
     "change_contract_versions",
     "change_contracts",
     "decisions",
@@ -69,6 +70,7 @@ try {
       "0001_control_plane_foundation.sql",
       "0002_work_queue_execution_leases.sql",
       "0003_work_freshness_validation.sql",
+      "0004_change_contract_authorization.sql",
     ],
     "all foundation migrations must be recorded exactly once",
   );
