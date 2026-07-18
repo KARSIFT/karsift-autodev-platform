@@ -1,0 +1,51 @@
+name: ADP-010 Diagnostics
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  provider-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_DB: autodev
+          POSTGRES_USER: autodev
+          POSTGRES_PASSWORD: autodev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U autodev -d autodev"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://autodev:autodev@127.0.0.1:5432/autodev
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run build
+      - run: npm run migrate
+      - name: Capture provider lifecycle output
+        id: provider
+        run: |
+          set -o pipefail
+          npm run verify:provider 2>&1 | tee provider-diagnostics.log
+      - name: Upload provider diagnostics
+        if: failure() && steps.provider.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: adp010-provider-diagnostics
+          path: provider-diagnostics.log
+          retention-days: 1
