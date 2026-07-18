@@ -94,7 +94,16 @@ jobs:
           retention-days: 1
 
       - name: Apply PostgreSQL migration
-        run: npm run migrate
+        id: apply_migration
+        run: npm run migrate 2>&1 | tee migration.log
+
+      - name: Upload migration diagnostics
+        if: failure() && steps.apply_migration.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-diagnostics
+          path: migration.log
+          retention-days: 1
 
       - name: Re-run migration to prove idempotency
         run: npm run migrate
