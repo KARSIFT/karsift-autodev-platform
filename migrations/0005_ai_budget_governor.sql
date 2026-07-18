@@ -86,6 +86,35 @@ CREATE TRIGGER ai_budget_decisions_immutable
 BEFORE UPDATE OR DELETE ON ai_budget_decisions
 FOR EACH ROW EXECUTE FUNCTION prevent_immutable_table_mutation();
 
+CREATE OR REPLACE FUNCTION is_effective_capability_enabled(
+    p_project_id uuid,
+    p_capability text
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT COALESCE(
+        (
+            SELECT project_switch.enabled
+              FROM capability_switches project_switch
+             WHERE project_switch.scope_type = 'PROJECT'
+               AND project_switch.project_id = p_project_id
+               AND project_switch.capability = p_capability
+             LIMIT 1
+        ),
+        (
+            SELECT global_switch.enabled
+              FROM capability_switches global_switch
+             WHERE global_switch.scope_type = 'GLOBAL'
+               AND global_switch.project_id IS NULL
+               AND global_switch.capability = p_capability
+             LIMIT 1
+        ),
+        false
+    );
+$$;
+
 CREATE OR REPLACE FUNCTION release_stale_ai_budget_reservations()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -113,35 +142,45 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    latest_decision record;
+    latest_decision_id uuid;
+    latest_execution_class text;
+    latest_outcome text;
 BEGIN
     SELECT budget_decision.id,
            budget_decision.execution_class,
            budget_decision.decision
-      INTO latest_decision
-      FROM work_queue_items work
+      INTO latest_decision_id,
+           latest_execution_class,
+           latest_outcome
+      FROM work_queue_items work_item
       JOIN ai_budget_decisions budget_decision
-        ON budget_decision.work_queue_item_id = work.id
-       AND budget_decision.project_id = work.project_id
-       AND budget_decision.queue_state_version = work.state_version
-     WHERE work.id = NEW.work_queue_item_id
-       AND work.project_id = NEW.project_id
+        ON budget_decision.work_queue_item_id = work_item.id
+       AND budget_decision.project_id = work_item.project_id
+       AND budget_decision.queue_state_version = work_item.state_version
+     WHERE work_item.id = NEW.work_queue_item_id
+       AND work_item.project_id = NEW.project_id
      ORDER BY budget_decision.created_at DESC, budget_decision.id DESC
      LIMIT 1;
 
-    IF latest_decision.id IS NULL OR latest_decision.decision <> 'APPROVED' THEN
+    IF latest_decision_id IS NULL OR latest_outcome <> 'APPROVED' THEN
         RAISE EXCEPTION 'Execution budget conflict: current queue state has no approved budget decision';
     END IF;
 
-    IF latest_decision.execution_class <> 'DETERMINISTIC' AND NOT EXISTS (
-        SELECT 1
-          FROM ai_budget_reservations reservation
-         WHERE reservation.budget_decision_id = latest_decision.id
-           AND reservation.project_id = NEW.project_id
-           AND reservation.work_queue_item_id = NEW.work_queue_item_id
-           AND reservation.status = 'RESERVED'
-    ) THEN
-        RAISE EXCEPTION 'Execution budget conflict: approved AI work has no active cost reservation';
+    IF latest_execution_class <> 'DETERMINISTIC' THEN
+        IF NOT is_effective_capability_enabled(NEW.project_id, 'AI_DISPATCH') THEN
+            RAISE EXCEPTION 'Execution capability conflict: AI_DISPATCH is disabled';
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+              FROM ai_budget_reservations reservation
+             WHERE reservation.budget_decision_id = latest_decision_id
+               AND reservation.project_id = NEW.project_id
+               AND reservation.work_queue_item_id = NEW.work_queue_item_id
+               AND reservation.status = 'RESERVED'
+        ) THEN
+            RAISE EXCEPTION 'Execution budget conflict: approved AI work has no active cost reservation';
+        END IF;
     END IF;
 
     RETURN NEW;
@@ -163,12 +202,12 @@ BEGIN
            execution_attempt_id = NEW.id,
            committed_at = now()
       FROM ai_budget_decisions budget_decision,
-           work_queue_items work
-     WHERE work.id = NEW.work_queue_item_id
-       AND work.project_id = NEW.project_id
-       AND budget_decision.work_queue_item_id = work.id
-       AND budget_decision.project_id = work.project_id
-       AND budget_decision.queue_state_version = work.state_version
+           work_queue_items work_item
+     WHERE work_item.id = NEW.work_queue_item_id
+       AND work_item.project_id = NEW.project_id
+       AND budget_decision.work_queue_item_id = work_item.id
+       AND budget_decision.project_id = work_item.project_id
+       AND budget_decision.queue_state_version = work_item.state_version
        AND budget_decision.decision = 'APPROVED'
        AND budget_decision.execution_class <> 'DETERMINISTIC'
        AND reservation.budget_decision_id = budget_decision.id
