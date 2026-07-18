@@ -26,8 +26,10 @@ export interface AuthorizationPolicyDecision {
   readonly requiredAuthority: "SYSTEM_OR_FOUNDER" | "FOUNDER";
 }
 
-function isObject(value: JsonValue): value is { [key: string]: JsonValue } {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+function isObject(
+  value: JsonValue | undefined,
+): value is { [key: string]: JsonValue } {
+  return value !== null && value !== undefined && typeof value === "object" && !Array.isArray(value);
 }
 
 function requiredBoolean(
