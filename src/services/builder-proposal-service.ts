@@ -3,6 +3,20 @@ import type { BuilderProposalStore } from "../store/builder-proposal-types.js";
 import type { BuilderDispatchStore } from "../store/builder-runtime-types.js";
 import type { Actor } from "../store/types.js";
 
+function recordField(value: unknown, field: string): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Builder dispatch response ${field} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function requiredString(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Builder dispatch response ${field} must be a non-empty string`);
+  }
+  return value;
+}
+
 export class BuilderProposalService {
   public constructor(
     private readonly proposalStore: BuilderProposalStore,
@@ -30,7 +44,7 @@ export class BuilderProposalService {
     const dispatch = await this.dispatchStore.acquireBuilderDispatchClaim({
       builderInvocationId,
       claimOwner: input.claimOwner,
-      claimLeaseSeconds: input.claimLeaseSeconds,
+      leaseSeconds: input.claimLeaseSeconds,
       actor: input.actor,
     });
     if (!dispatch.acquired) {
@@ -40,8 +54,11 @@ export class BuilderProposalService {
       );
     }
 
-    const claimId = String(dispatch.claim.id);
-    const revalidationId = String(dispatch.revalidation.id);
+    const claim = recordField(dispatch.claim, "claim");
+    const revalidation = recordField(dispatch.revalidation, "revalidation");
+    const claimId = requiredString(claim.id, "claim.id");
+    const revalidationId = requiredString(revalidation.id, "revalidation.id");
+    const claimToken = requiredString(dispatch.claimToken, "claimToken");
     const proposalClaim = await this.proposalStore.claimBuilderProposalRun({
       builderProposalRunId: input.builderProposalRunId,
       builderDispatchClaimId: claimId,
@@ -52,7 +69,7 @@ export class BuilderProposalService {
       await this.dispatchStore
         .completeBuilderDispatchClaim({
           builderDispatchClaimId: claimId,
-          claimToken: dispatch.claimToken,
+          claimToken,
           actor: input.actor,
         })
         .catch(() => undefined);
@@ -81,7 +98,7 @@ export class BuilderProposalService {
       });
       await this.dispatchStore.completeBuilderDispatchClaim({
         builderDispatchClaimId: claimId,
-        claimToken: dispatch.claimToken,
+        claimToken,
         actor: input.actor,
       });
       return completed;
@@ -95,7 +112,7 @@ export class BuilderProposalService {
       await this.dispatchStore
         .completeBuilderDispatchClaim({
           builderDispatchClaimId: claimId,
-          claimToken: dispatch.claimToken,
+          claimToken,
           actor: input.actor,
         })
         .catch(() => undefined);
