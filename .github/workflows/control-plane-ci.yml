@@ -82,7 +82,16 @@ jobs:
         run: docker compose -f deploy/development/compose.yaml config >/dev/null
 
       - name: Build development Control Plane image
-        run: docker build --target runtime -t karsift-autodev-control-plane:ci .
+        id: docker_build
+        run: docker build --progress=plain --target runtime -t karsift-autodev-control-plane:ci . 2>&1 | tee docker-build.log
+
+      - name: Upload Docker build diagnostics
+        if: failure() && steps.docker_build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-build-diagnostics
+          path: docker-build.log
+          retention-days: 1
 
       - name: Apply PostgreSQL migration
         run: npm run migrate
