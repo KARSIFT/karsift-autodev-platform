@@ -8,6 +8,13 @@ import type {
   UpsertAiBudgetPolicyInput,
 } from "./ai-budget-types.js";
 import { PostgresBudgetAwareLeaseStore } from "./budget-aware-lease-store.js";
+import { PostgresBuilderRuntimeStore } from "./builder-runtime-store.js";
+import type {
+  BuilderRuntimeStore,
+  CompleteBuilderInvocationInput,
+  PrepareBuilderInvocationInput,
+  StartBuilderInvocationInput,
+} from "./builder-runtime-types.js";
 import { PostgresContractAuthorizationStore } from "./contract-authorization-store.js";
 import type {
   ContractAuthorizationStore,
@@ -50,7 +57,8 @@ export class ExtendedPostgresControlPlaneStore
     ContractAuthorizationStore,
     AiBudgetStore,
     ProviderDispatchStore,
-    TaskContextPackStore
+    TaskContextPackStore,
+    BuilderRuntimeStore
 {
   private readonly workQueue: PostgresWorkQueueStore;
   private readonly budgetAwareLease: PostgresBudgetAwareLeaseStore;
@@ -59,6 +67,7 @@ export class ExtendedPostgresControlPlaneStore
   private readonly aiBudget: PostgresAiBudgetStore;
   private readonly providerDispatch: PostgresProviderDispatchStore;
   private readonly taskContextPack: PostgresTaskContextPackStore;
+  private readonly builderRuntime: PostgresBuilderRuntimeStore;
 
   public constructor(pool: Pool) {
     super(pool);
@@ -69,6 +78,7 @@ export class ExtendedPostgresControlPlaneStore
     this.aiBudget = new PostgresAiBudgetStore(pool);
     this.providerDispatch = new PostgresProviderDispatchStore(pool);
     this.taskContextPack = new PostgresTaskContextPackStore(pool);
+    this.builderRuntime = new PostgresBuilderRuntimeStore(pool);
   }
 
   public createWorkQueueItem(input: CreateWorkQueueItemInput) {
@@ -187,6 +197,30 @@ export class ExtendedPostgresControlPlaneStore
     return this.taskContextPack.getPlatformTaskContextPackStatus();
   }
 
+  public prepareBuilderInvocation(input: PrepareBuilderInvocationInput) {
+    return this.builderRuntime.prepareBuilderInvocation(input);
+  }
+
+  public startBuilderInvocation(input: StartBuilderInvocationInput) {
+    return this.builderRuntime.startBuilderInvocation(input);
+  }
+
+  public completeBuilderInvocation(input: CompleteBuilderInvocationInput) {
+    return this.builderRuntime.completeBuilderInvocation(input);
+  }
+
+  public getBuilderInvocation(builderInvocationId: string) {
+    return this.builderRuntime.getBuilderInvocation(builderInvocationId);
+  }
+
+  public getProjectBuilderRuntimeStatus(projectId: string) {
+    return this.builderRuntime.getProjectBuilderRuntimeStatus(projectId);
+  }
+
+  public getPlatformBuilderRuntimeStatus() {
+    return this.builderRuntime.getPlatformBuilderRuntimeStatus();
+  }
+
   public override async getProjectStatus(projectId: string) {
     const [
       base,
@@ -196,6 +230,7 @@ export class ExtendedPostgresControlPlaneStore
       aiBudget,
       providerDispatch,
       contextPacks,
+      builderRuntime,
     ] = await Promise.all([
       super.getProjectStatus(projectId),
       this.workQueue.getProjectQueueStatus(projectId),
@@ -204,6 +239,7 @@ export class ExtendedPostgresControlPlaneStore
       this.aiBudget.getProjectAiBudgetStatus(projectId),
       this.providerDispatch.getProjectProviderDispatchStatus(projectId),
       this.taskContextPack.getProjectTaskContextPackStatus(projectId),
+      this.builderRuntime.getProjectBuilderRuntimeStatus(projectId),
     ]);
     return {
       ...base,
@@ -213,6 +249,7 @@ export class ExtendedPostgresControlPlaneStore
       ...aiBudget,
       ...providerDispatch,
       ...contextPacks,
+      ...builderRuntime,
     };
   }
 
@@ -225,6 +262,7 @@ export class ExtendedPostgresControlPlaneStore
       aiBudget,
       providerDispatch,
       contextPacks,
+      builderRuntime,
     ] = await Promise.all([
       super.getPlatformStatus(),
       this.workQueue.getPlatformQueueStatus(),
@@ -233,6 +271,7 @@ export class ExtendedPostgresControlPlaneStore
       this.aiBudget.getPlatformAiBudgetStatus(),
       this.providerDispatch.getPlatformProviderDispatchStatus(),
       this.taskContextPack.getPlatformTaskContextPackStatus(),
+      this.builderRuntime.getPlatformBuilderRuntimeStatus(),
     ]);
     return {
       ...base,
@@ -242,6 +281,7 @@ export class ExtendedPostgresControlPlaneStore
       ...aiBudget,
       ...providerDispatch,
       ...contextPacks,
+      ...builderRuntime,
     };
   }
 }
