@@ -10,6 +10,9 @@ interface WorkQueueRow extends QueryResultRow {
   readonly task_id: string;
   readonly state_version: number;
   readonly idempotency_key: string;
+  readonly work_validation_run_id: string;
+  readonly change_contract_authorization_decision_id: string;
+  readonly ai_budget_decision_id: string;
 }
 
 async function appendAudit(
@@ -89,7 +92,10 @@ export class PostgresBudgetAwareLeaseStore {
            w.project_id,
            w.task_id,
            w.state_version,
-           w.idempotency_key
+           w.idempotency_key,
+           latest_validation.id AS work_validation_run_id,
+           latest_authorization.id AS change_contract_authorization_decision_id,
+           latest_budget.id AS ai_budget_decision_id
          FROM work_queue_items w
          JOIN projects p ON p.id = w.project_id
          JOIN tasks t ON t.id = w.task_id AND t.project_id = w.project_id
@@ -99,6 +105,29 @@ export class PostgresBudgetAwareLeaseStore {
          JOIN change_contracts c
            ON c.id = cv.contract_id
           AND c.project_id = w.project_id
+         JOIN LATERAL (
+           SELECT validation.id
+             FROM work_validation_runs validation
+            WHERE validation.work_queue_item_id = w.id
+              AND validation.project_id = w.project_id
+              AND validation.queue_state_version = w.state_version
+              AND validation.change_contract_version_id = cv.id
+              AND validation.contract_content_hash = cv.content_hash
+              AND validation.outcome = 'VALID'
+            ORDER BY validation.created_at DESC, validation.id DESC
+            LIMIT 1
+         ) latest_validation ON true
+         JOIN LATERAL (
+           SELECT auth_decision.id,
+                  auth_decision.decision
+             FROM change_contract_authorization_decisions auth_decision
+            WHERE auth_decision.project_id = w.project_id
+              AND auth_decision.change_contract_version_id = cv.id
+              AND auth_decision.contract_content_hash = cv.content_hash
+              AND auth_decision.decision IN ('AUTHORIZED', 'REVOKED')
+            ORDER BY auth_decision.created_at DESC, auth_decision.id DESC
+            LIMIT 1
+         ) latest_authorization ON latest_authorization.decision = 'AUTHORIZED'
          JOIN LATERAL (
            SELECT budget_decision.id,
                   budget_decision.execution_class,
@@ -117,17 +146,6 @@ export class PostgresBudgetAwareLeaseStore {
            AND t.status IN ('QUEUED', 'BLOCKED', 'READY')
            AND c.status NOT IN ('SUPERSEDED', 'CANCELLED')
            AND cv.version = c.current_version
-           AND has_effective_change_contract_authorization(cv.id, cv.content_hash)
-           AND EXISTS (
-             SELECT 1
-               FROM work_validation_runs validation
-              WHERE validation.work_queue_item_id = w.id
-                AND validation.project_id = w.project_id
-                AND validation.queue_state_version = w.state_version
-                AND validation.change_contract_version_id = cv.id
-                AND validation.contract_content_hash = cv.content_hash
-                AND validation.outcome = 'VALID'
-           )
            AND (
              latest_budget.execution_class = 'DETERMINISTIC'
              OR (
@@ -178,8 +196,23 @@ export class PostgresBudgetAwareLeaseStore {
           attempt_number,
           idempotency_key,
           lease_owner,
-          lease_expires_at
-        ) VALUES ($1, $2, $3, $4, $5, now() + ($6 * interval '1 second'))
+          lease_expires_at,
+          claim_queue_state_version,
+          work_validation_run_id,
+          change_contract_authorization_decision_id,
+          ai_budget_decision_id
+        ) VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          now() + ($6 * interval '1 second'),
+          $7,
+          $8,
+          $9,
+          $10
+        )
         RETURNING *`,
         [
           candidate.id,
@@ -188,6 +221,10 @@ export class PostgresBudgetAwareLeaseStore {
           candidate.idempotency_key,
           input.leaseOwner,
           input.leaseSeconds,
+          candidate.state_version,
+          candidate.work_validation_run_id,
+          candidate.change_contract_authorization_decision_id,
+          candidate.ai_budget_decision_id,
         ],
       );
 
@@ -214,6 +251,11 @@ export class PostgresBudgetAwareLeaseStore {
           leaseOwner: input.leaseOwner,
           attemptNumber,
           idempotencyKey: candidate.idempotency_key,
+          claimQueueStateVersion: candidate.state_version,
+          workValidationRunId: candidate.work_validation_run_id,
+          changeContractAuthorizationDecisionId:
+            candidate.change_contract_authorization_decision_id,
+          aiBudgetDecisionId: candidate.ai_budget_decision_id,
         },
       });
 

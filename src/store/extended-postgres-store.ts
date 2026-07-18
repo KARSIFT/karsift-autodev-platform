@@ -19,6 +19,11 @@ import type {
   FreshnessValidationStore,
   ValidateWorkQueueItemInput,
 } from "./freshness-validation-types.js";
+import { PostgresTaskContextPackStore } from "./task-context-pack-store.js";
+import type {
+  CreateTaskContextPackInput,
+  TaskContextPackStore,
+} from "./task-context-pack-types.js";
 import { PostgresWorkQueueStore } from "./work-queue-store.js";
 import type {
   ClaimExecutionLeaseInput,
@@ -36,13 +41,15 @@ export class ExtendedPostgresControlPlaneStore
     WorkQueueStore,
     FreshnessValidationStore,
     ContractAuthorizationStore,
-    AiBudgetStore
+    AiBudgetStore,
+    TaskContextPackStore
 {
   private readonly workQueue: PostgresWorkQueueStore;
   private readonly budgetAwareLease: PostgresBudgetAwareLeaseStore;
   private readonly freshnessValidation: PostgresFreshnessValidationStore;
   private readonly contractAuthorization: PostgresContractAuthorizationStore;
   private readonly aiBudget: PostgresAiBudgetStore;
+  private readonly taskContextPack: PostgresTaskContextPackStore;
 
   public constructor(pool: Pool) {
     super(pool);
@@ -51,6 +58,7 @@ export class ExtendedPostgresControlPlaneStore
     this.freshnessValidation = new PostgresFreshnessValidationStore(pool);
     this.contractAuthorization = new PostgresContractAuthorizationStore(pool);
     this.aiBudget = new PostgresAiBudgetStore(pool);
+    this.taskContextPack = new PostgresTaskContextPackStore(pool);
   }
 
   public createWorkQueueItem(input: CreateWorkQueueItemInput) {
@@ -131,25 +139,59 @@ export class ExtendedPostgresControlPlaneStore
     return this.aiBudget.getPlatformAiBudgetStatus();
   }
 
+  public createTaskContextPack(input: CreateTaskContextPackInput) {
+    return this.taskContextPack.createTaskContextPack(input);
+  }
+
+  public getTaskContextPack(executionAttemptId: string) {
+    return this.taskContextPack.getTaskContextPack(executionAttemptId);
+  }
+
+  public getProjectTaskContextPackStatus(projectId: string) {
+    return this.taskContextPack.getProjectTaskContextPackStatus(projectId);
+  }
+
+  public getPlatformTaskContextPackStatus() {
+    return this.taskContextPack.getPlatformTaskContextPackStatus();
+  }
+
   public override async getProjectStatus(projectId: string) {
-    const [base, queue, validation, authorization, aiBudget] = await Promise.all([
-      super.getProjectStatus(projectId),
-      this.workQueue.getProjectQueueStatus(projectId),
-      this.freshnessValidation.getProjectValidationStatus(projectId),
-      this.contractAuthorization.getProjectAuthorizationStatus(projectId),
-      this.aiBudget.getProjectAiBudgetStatus(projectId),
-    ]);
-    return { ...base, ...queue, ...validation, ...authorization, ...aiBudget };
+    const [base, queue, validation, authorization, aiBudget, contextPacks] =
+      await Promise.all([
+        super.getProjectStatus(projectId),
+        this.workQueue.getProjectQueueStatus(projectId),
+        this.freshnessValidation.getProjectValidationStatus(projectId),
+        this.contractAuthorization.getProjectAuthorizationStatus(projectId),
+        this.aiBudget.getProjectAiBudgetStatus(projectId),
+        this.taskContextPack.getProjectTaskContextPackStatus(projectId),
+      ]);
+    return {
+      ...base,
+      ...queue,
+      ...validation,
+      ...authorization,
+      ...aiBudget,
+      ...contextPacks,
+    };
   }
 
   public override async getPlatformStatus() {
-    const [base, queue, validation, authorization, aiBudget] = await Promise.all([
-      super.getPlatformStatus(),
-      this.workQueue.getPlatformQueueStatus(),
-      this.freshnessValidation.getPlatformValidationStatus(),
-      this.contractAuthorization.getPlatformAuthorizationStatus(),
-      this.aiBudget.getPlatformAiBudgetStatus(),
-    ]);
-    return { ...base, ...queue, ...validation, ...authorization, ...aiBudget };
+    const [base, queue, validation, authorization, aiBudget, contextPacks] =
+      await Promise.all([
+        super.getPlatformStatus(),
+        this.workQueue.getPlatformQueueStatus(),
+        this.freshnessValidation.getPlatformValidationStatus(),
+        this.contractAuthorization.getPlatformAuthorizationStatus(),
+        this.aiBudget.getPlatformAiBudgetStatus(),
+        this.taskContextPack.getPlatformTaskContextPackStatus(),
+      ]);
+    return {
+      ...base,
+      ...queue,
+      ...validation,
+      ...authorization,
+      ...aiBudget,
+      ...contextPacks,
+    };
   }
 }
