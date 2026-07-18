@@ -48,6 +48,11 @@ try {
   assert.equal(typeof version, "object");
   const versionId = String(version.id);
 
+  await pool.query(
+    "UPDATE change_contracts SET status = 'AUTHORIZED' WHERE id = $1",
+    [contractBundle.contract.id],
+  );
+
   const task = await store.createTask({
     projectId,
     changeContractVersionId: versionId,
@@ -71,14 +76,12 @@ try {
   const workQueueItemId = String(workItem.id);
   assert.equal(workItem.status, "QUEUED");
 
-  const eligible = await store.setWorkQueueEligibility({
+  const initialValidation = await store.validateWorkQueueItem({
     workQueueItemId,
-    expectedStateVersion: Number(workItem.state_version),
-    eligible: true,
-    waitingReason: "NONE",
     actor,
   });
-  assert.equal(eligible.status, "ELIGIBLE");
+  assert.equal(initialValidation.validation.outcome, "VALID");
+  assert.equal(initialValidation.workItem.status, "ELIGIBLE");
 
   const firstClaim = await store.claimExecutionLease({
     projectId,
@@ -144,6 +147,12 @@ try {
   assert.equal(released.workItem.status, "ELIGIBLE");
   assert.equal(released.executionAttempt.status, "RELEASED");
 
+  const releaseValidation = await store.validateWorkQueueItem({
+    workQueueItemId,
+    actor,
+  });
+  assert.equal(releaseValidation.validation.outcome, "VALID");
+
   const secondClaim = await store.claimExecutionLease({
     projectId,
     leaseOwner: "worker-two",
@@ -160,13 +169,31 @@ try {
     [secondAttempt.id],
   );
 
+  const recoverySweep = await store.claimExecutionLease({
+    projectId,
+    leaseOwner: "worker-three",
+    leaseSeconds: 300,
+    actor,
+  });
+  assert.equal(
+    recoverySweep,
+    null,
+    "expired recovery must invalidate old validation before reclaim",
+  );
+
+  const recoveryValidation = await store.validateWorkQueueItem({
+    workQueueItemId,
+    actor,
+  });
+  assert.equal(recoveryValidation.validation.outcome, "VALID");
+
   const recoveredClaim = await store.claimExecutionLease({
     projectId,
     leaseOwner: "worker-three",
     leaseSeconds: 300,
     actor,
   });
-  assert.notEqual(recoveredClaim, null, "expired lease must be recovered and reclaimable");
+  assert.notEqual(recoveredClaim, null, "revalidated expired work must be reclaimable");
   const thirdAttempt = recoveredClaim.executionAttempt;
   assert.equal(thirdAttempt.attempt_number, 3);
   assert.equal(thirdAttempt.idempotency_key, idempotencyKey);
