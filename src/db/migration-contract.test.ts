@@ -91,3 +91,34 @@ test("authorization migration makes append-only exact-version authority the exec
   assert.doesNotMatch(migration, /^\s*BEGIN;/m);
   assert.doesNotMatch(migration, /^\s*COMMIT;/m);
 });
+
+test("AI budget migration gates exact-state leases and preserves activation separation", async () => {
+  const migration = await readFile(
+    path.resolve(process.cwd(), "migrations/0005_ai_budget_governor.sql"),
+    "utf8",
+  );
+  const leaseStore = await readFile(
+    path.resolve(process.cwd(), "src/store/budget-aware-lease-store.ts"),
+    "utf8",
+  );
+  const budgetStore = await readFile(
+    path.resolve(process.cwd(), "src/store/ai-budget-store.ts"),
+    "utf8",
+  );
+
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_budget_policies/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_budget_decisions/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS ai_budget_reservations/);
+  assert.match(migration, /ai_budget_decisions_immutable/);
+  assert.match(migration, /work_queue_release_stale_ai_budget_reservations/);
+  assert.match(migration, /execution_attempt_budget_authorization_gate/);
+  assert.match(migration, /execution_attempt_require_ai_budget_settlement/);
+  assert.match(migration, /is_effective_capability_enabled/);
+  assert.match(leaseStore, /latest_budget\.decision = 'APPROVED'/);
+  assert.match(leaseStore, /latest_budget\.execution_class = 'DETERMINISTIC'/);
+  assert.match(leaseStore, /is_effective_capability_enabled\(w\.project_id, 'AI_DISPATCH'\)/);
+  assert.match(budgetStore, /FOR UPDATE/);
+  assert.match(budgetStore, /PERIOD_BUDGET_EXHAUSTED|evaluateAiBudget/);
+  assert.doesNotMatch(migration, /^\s*BEGIN;/m);
+  assert.doesNotMatch(migration, /^\s*COMMIT;/m);
+});

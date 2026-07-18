@@ -1,5 +1,13 @@
 import type { Pool } from "pg";
 
+import { PostgresAiBudgetStore } from "./ai-budget-store.js";
+import type {
+  AiBudgetStore,
+  AuthorizeWorkBudgetInput,
+  SettleAiBudgetReservationInput,
+  UpsertAiBudgetPolicyInput,
+} from "./ai-budget-types.js";
+import { PostgresBudgetAwareLeaseStore } from "./budget-aware-lease-store.js";
 import { PostgresContractAuthorizationStore } from "./contract-authorization-store.js";
 import type {
   ContractAuthorizationStore,
@@ -24,17 +32,25 @@ import type {
 
 export class ExtendedPostgresControlPlaneStore
   extends PostgresControlPlaneStore
-  implements WorkQueueStore, FreshnessValidationStore, ContractAuthorizationStore
+  implements
+    WorkQueueStore,
+    FreshnessValidationStore,
+    ContractAuthorizationStore,
+    AiBudgetStore
 {
   private readonly workQueue: PostgresWorkQueueStore;
+  private readonly budgetAwareLease: PostgresBudgetAwareLeaseStore;
   private readonly freshnessValidation: PostgresFreshnessValidationStore;
   private readonly contractAuthorization: PostgresContractAuthorizationStore;
+  private readonly aiBudget: PostgresAiBudgetStore;
 
   public constructor(pool: Pool) {
     super(pool);
     this.workQueue = new PostgresWorkQueueStore(pool);
+    this.budgetAwareLease = new PostgresBudgetAwareLeaseStore(pool);
     this.freshnessValidation = new PostgresFreshnessValidationStore(pool);
     this.contractAuthorization = new PostgresContractAuthorizationStore(pool);
+    this.aiBudget = new PostgresAiBudgetStore(pool);
   }
 
   public createWorkQueueItem(input: CreateWorkQueueItemInput) {
@@ -46,7 +62,7 @@ export class ExtendedPostgresControlPlaneStore
   }
 
   public claimExecutionLease(input: ClaimExecutionLeaseInput) {
-    return this.workQueue.claimExecutionLease(input);
+    return this.budgetAwareLease.claimExecutionLease(input);
   }
 
   public heartbeatExecutionLease(input: HeartbeatExecutionLeaseInput) {
@@ -95,23 +111,45 @@ export class ExtendedPostgresControlPlaneStore
     return this.contractAuthorization.getPlatformAuthorizationStatus();
   }
 
+  public upsertAiBudgetPolicy(input: UpsertAiBudgetPolicyInput) {
+    return this.aiBudget.upsertAiBudgetPolicy(input);
+  }
+
+  public authorizeWorkBudget(input: AuthorizeWorkBudgetInput) {
+    return this.aiBudget.authorizeWorkBudget(input);
+  }
+
+  public settleAiBudgetReservation(input: SettleAiBudgetReservationInput) {
+    return this.aiBudget.settleAiBudgetReservation(input);
+  }
+
+  public getProjectAiBudgetStatus(projectId: string) {
+    return this.aiBudget.getProjectAiBudgetStatus(projectId);
+  }
+
+  public getPlatformAiBudgetStatus() {
+    return this.aiBudget.getPlatformAiBudgetStatus();
+  }
+
   public override async getProjectStatus(projectId: string) {
-    const [base, queue, validation, authorization] = await Promise.all([
+    const [base, queue, validation, authorization, aiBudget] = await Promise.all([
       super.getProjectStatus(projectId),
       this.workQueue.getProjectQueueStatus(projectId),
       this.freshnessValidation.getProjectValidationStatus(projectId),
       this.contractAuthorization.getProjectAuthorizationStatus(projectId),
+      this.aiBudget.getProjectAiBudgetStatus(projectId),
     ]);
-    return { ...base, ...queue, ...validation, ...authorization };
+    return { ...base, ...queue, ...validation, ...authorization, ...aiBudget };
   }
 
   public override async getPlatformStatus() {
-    const [base, queue, validation, authorization] = await Promise.all([
+    const [base, queue, validation, authorization, aiBudget] = await Promise.all([
       super.getPlatformStatus(),
       this.workQueue.getPlatformQueueStatus(),
       this.freshnessValidation.getPlatformValidationStatus(),
       this.contractAuthorization.getPlatformAuthorizationStatus(),
+      this.aiBudget.getPlatformAiBudgetStatus(),
     ]);
-    return { ...base, ...queue, ...validation, ...authorization };
+    return { ...base, ...queue, ...validation, ...authorization, ...aiBudget };
   }
 }

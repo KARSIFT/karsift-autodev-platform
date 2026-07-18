@@ -16,6 +16,7 @@
     "verify:queue": "node scripts/verify-work-queue.mjs",
     "verify:freshness": "node scripts/verify-freshness-validation.mjs",
     "verify:authorization": "node scripts/verify-contract-authorization.mjs",
+    "verify:budget": "node scripts/verify-ai-budget.mjs",
     "check": "npm run build && npm test"
   },
   "dependencies": {

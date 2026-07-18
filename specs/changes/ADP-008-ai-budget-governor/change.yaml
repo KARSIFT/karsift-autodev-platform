@@ -1,0 +1,38 @@
+id: ADP-008
+slug: ai-budget-governor
+status: implemented
+risk: R3
+owner: karsift-control-plane
+issue: 16
+objective: >-
+  Require an exact-state AI budget decision before every execution lease and atomically
+  reserve project budget for AI-class work without enabling AI dispatch.
+activation_level_before: A1
+activation_level_after: A1
+capabilities_enabled: []
+capabilities_remaining_disabled:
+  - AUTOMATED_WRITE
+  - AI_DISPATCH
+  - AUTO_MERGE
+  - DEPLOYMENT
+  - PRODUCTION_RELEASE
+  - INCIDENT_REPAIR
+in_scope:
+  - project AI budget policies
+  - deterministic and AI execution classes
+  - append-only exact-state budget decisions
+  - atomic AI cost reservations
+  - stale reservation release
+  - budget-aware lease selection
+  - AI dispatch capability separation
+  - explicit AI cost settlement before terminal completion
+  - project and platform budget observability
+out_of_scope:
+  - provider API calls
+  - provider quota and health probing
+  - live token cost ingestion
+  - Codex dispatch
+  - Task Context Packs
+  - Claude verification
+  - automatic merge
+  - deployment or production release
