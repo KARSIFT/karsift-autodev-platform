@@ -2,9 +2,13 @@ import { BuilderAdapterRegistry } from "../agents/builder-adapter.js";
 import {
   assertBuilderAdapterResult,
   type BuilderAdapterInput,
+  type BuilderAdapterResult,
   type BuilderExecutionLimits,
 } from "../domain/builder-runtime.js";
-import type { BuilderRuntimeStore } from "../store/builder-runtime-types.js";
+import type {
+  BuilderDispatchStore,
+  BuilderRuntimeStore,
+} from "../store/builder-runtime-types.js";
 import type { Actor } from "../store/types.js";
 
 interface RuntimePlan {
@@ -31,6 +35,7 @@ function limitsFromPlan(plan: RuntimePlan): BuilderExecutionLimits {
 export class BuilderRuntimeService {
   public constructor(
     private readonly store: BuilderRuntimeStore,
+    private readonly dispatchStore: BuilderDispatchStore,
     private readonly adapters: BuilderAdapterRegistry,
   ) {}
 
@@ -38,15 +43,51 @@ export class BuilderRuntimeService {
     readonly builderInvocationId: string;
     readonly actor: Actor;
   }): Promise<Record<string, unknown>> {
-    const started = await this.store.startBuilderInvocation({
+    const dispatch = await this.dispatchStore.acquireBuilderDispatchClaim({
       builderInvocationId: input.builderInvocationId,
+      claimOwner: input.actor.id,
+      leaseSeconds: 300,
       actor: input.actor,
     });
+
+    if (dispatch.acquired !== true) {
+      return {
+        executed: false,
+        dispatchClaim: dispatch.claim ?? null,
+        dispatchRevalidation: dispatch.revalidation ?? null,
+        reason: dispatch.reason ?? "DISPATCH_NOT_ACQUIRED",
+      };
+    }
+
+    const claim = dispatch.claim as Record<string, unknown>;
+    const claimId = String(claim.id);
+    const claimToken = String(claim.claim_token);
+
+    let started: Record<string, unknown>;
+    try {
+      started = await this.store.startBuilderInvocation({
+        builderInvocationId: input.builderInvocationId,
+        actor: input.actor,
+      });
+    } catch (error) {
+      await this.dispatchStore.releaseBuilderDispatchClaim({
+        builderDispatchClaimId: claimId,
+        claimToken,
+        actor: input.actor,
+      });
+      throw error;
+    }
+
     const invocation = started.invocation as Record<string, unknown>;
     const plan = started.plan as unknown as RuntimePlan;
     const adapter = this.adapters.get(plan.adapter_key);
 
     if (adapter.sideEffectMode !== plan.side_effect_mode) {
+      await this.dispatchStore.releaseBuilderDispatchClaim({
+        builderDispatchClaimId: claimId,
+        claimToken,
+        actor: input.actor,
+      });
       throw new Error(
         "Builder invocation conflict: adapter side-effect mode does not match the immutable plan",
       );
@@ -55,34 +96,50 @@ export class BuilderRuntimeService {
     const limits = limitsFromPlan(plan);
     const adapterInput: BuilderAdapterInput = {
       invocationId: String(invocation.id),
+      dispatchClaimId: claimId,
+      dispatchIdempotencyKey: String(claim.idempotency_key),
       planHash: plan.plan_hash,
       taskContextPackHash: plan.task_context_pack_hash,
       providerKey: plan.provider_key,
       limits,
     };
 
+    let result: BuilderAdapterResult;
     try {
-      const result = await adapter.execute(adapterInput);
+      result = await adapter.execute(adapterInput);
       assertBuilderAdapterResult(result, limits);
-      return await this.store.completeBuilderInvocation({
-        builderInvocationId: input.builderInvocationId,
-        result,
-        actor: input.actor,
-      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown builder adapter error";
-      return await this.store.completeBuilderInvocation({
-        builderInvocationId: input.builderInvocationId,
-        result: {
-          outcome: "FAILED",
-          turnsUsed: 0,
-          commandsUsed: 0,
-          durationMs: 0,
-          summary: "Builder adapter failed before producing a valid result.",
-          evidence: { error: message },
+      result = {
+        outcome: "FAILED",
+        turnsUsed: 0,
+        commandsUsed: 0,
+        durationMs: 0,
+        summary: "Builder adapter failed before producing a valid result.",
+        evidence: {
+          error: message,
+          dispatchClaimId: claimId,
+          dispatchIdempotencyKey: String(claim.idempotency_key),
         },
-        actor: input.actor,
-      });
+      };
     }
+
+    const completed = await this.store.completeBuilderInvocation({
+      builderInvocationId: input.builderInvocationId,
+      result,
+      actor: input.actor,
+    });
+    const completedClaim = await this.dispatchStore.completeBuilderDispatchClaim({
+      builderDispatchClaimId: claimId,
+      claimToken,
+      actor: input.actor,
+    });
+
+    return {
+      ...completed,
+      executed: true,
+      dispatchClaim: completedClaim,
+      dispatchRevalidation: dispatch.revalidation ?? null,
+    };
   }
 }
