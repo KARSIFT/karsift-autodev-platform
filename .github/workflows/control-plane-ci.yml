@@ -116,3 +116,6 @@ jobs:
 
       - name: Verify structured workspace mutations and atomic file evidence
         run: npm run verify:workspace-mutation
+
+      - name: Verify immutable workspace read context snapshots
+        run: npm run verify:workspace-read-context
