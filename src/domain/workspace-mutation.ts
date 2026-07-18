@@ -161,7 +161,7 @@ export function buildWorkspaceMutationPlanContent(
     builderInvocationId: input.builderInvocationId,
     workspaceStateVersion: input.workspaceStateVersion,
     workspacePath: input.workspacePath,
-    relevantPaths,
+    relevantPaths: [...relevantPaths],
     operations: operations.map((operation) => ({
       type: operation.type,
       path: operation.path,
