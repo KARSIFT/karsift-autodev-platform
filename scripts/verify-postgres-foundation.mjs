@@ -44,6 +44,7 @@ try {
     "founder_requests",
     "projects",
     "schema_migrations",
+    "task_context_packs",
     "tasks",
     "work_queue_items",
     "work_validation_runs",
@@ -75,6 +76,7 @@ try {
       "0003_work_freshness_validation.sql",
       "0004_change_contract_authorization.sql",
       "0005_ai_budget_governor.sql",
+      "0006_task_context_packs.sql",
     ],
     "all foundation migrations must be recorded exactly once",
   );
