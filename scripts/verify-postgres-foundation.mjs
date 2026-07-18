@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import pg from "pg";
 
 const { Pool } = pg;
-
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");
@@ -14,7 +13,6 @@ const pool = new Pool({ connectionString: databaseUrl });
 async function expectRejected(client, operation, message) {
   await client.query("SAVEPOINT invariant_check");
   let rejected = false;
-
   try {
     await operation();
   } catch {
@@ -23,12 +21,10 @@ async function expectRejected(client, operation, message) {
     await client.query("ROLLBACK TO SAVEPOINT invariant_check");
     await client.query("RELEASE SAVEPOINT invariant_check");
   }
-
   assert.equal(rejected, true, message);
 }
 
 const client = await pool.connect();
-
 try {
   const expectedTables = [
     "ai_budget_decisions",
@@ -60,6 +56,10 @@ try {
     "work_queue_items",
     "work_validation_runs",
     "workflow_runs",
+    "workspace_command_evidence",
+    "workspace_command_plans",
+    "workspace_command_policies",
+    "workspace_command_runs",
   ].sort();
 
   const tables = await client.query(
@@ -69,7 +69,6 @@ try {
         AND table_type = 'BASE TABLE'
       ORDER BY table_name`,
   );
-
   assert.deepEqual(
     tables.rows.map((row) => row.table_name).sort(),
     expectedTables,
@@ -92,6 +91,7 @@ try {
       "0008_controlled_builder_runtime.sql",
       "0009_atomic_builder_dispatch.sql",
       "0010_repository_workspaces.sql",
+      "0011_workspace_commands.sql",
     ],
     "all foundation migrations must be recorded exactly once",
   );
@@ -102,7 +102,6 @@ try {
       WHERE scope_type = 'GLOBAL'
       ORDER BY capability`,
   );
-
   assert.equal(switches.rowCount, 6, "all six global capability switches must exist");
   assert.equal(
     switches.rows.every((row) => row.enabled === false),
@@ -111,7 +110,6 @@ try {
   );
 
   await client.query("BEGIN");
-
   try {
     const projectOne = await client.query(
       `INSERT INTO projects(slug, name, repository_full_name)
@@ -123,7 +121,6 @@ try {
        VALUES ('ci-project-two', 'CI Project Two', 'KARSIFT/ci-project-two')
        RETURNING id`,
     );
-
     const projectOneId = projectOne.rows[0].id;
     const projectTwoId = projectTwo.rows[0].id;
 
@@ -133,40 +130,20 @@ try {
        RETURNING id`,
       [projectOneId],
     );
-
     const version = await client.query(
       `INSERT INTO change_contract_versions(
-         contract_id,
-         project_id,
-         version,
-         content,
-         content_hash,
-         created_by
-       )
-       VALUES (
-         $1,
-         $2,
-         1,
-         '{"objective":"ci"}'::jsonb,
-         repeat('a', 64),
-         'ci'
+         contract_id, project_id, version, content, content_hash, created_by
+       ) VALUES (
+         $1, $2, 1, '{"objective":"ci"}'::jsonb, repeat('a', 64), 'ci'
        )
        RETURNING id`,
       [contract.rows[0].id, projectOneId],
     );
-
     const versionId = version.rows[0].id;
-
     const audit = await client.query(
       `INSERT INTO audit_events(
-         project_id,
-         actor_type,
-         actor_id,
-         action,
-         entity_type,
-         entity_id
-       )
-       VALUES ($1, 'SYSTEM', 'ci', 'VERIFY', 'change_contract_version', $2)
+         project_id, actor_type, actor_id, action, entity_type, entity_id
+       ) VALUES ($1, 'SYSTEM', 'ci', 'VERIFY', 'change_contract_version', $2)
        RETURNING id`,
       [projectOneId, versionId],
     );
@@ -182,13 +159,11 @@ try {
         ),
       "change_contract_versions must reject UPDATE operations",
     );
-
     await expectRejected(
       client,
       () => client.query("DELETE FROM audit_events WHERE id = $1", [audit.rows[0].id]),
       "audit_events must reject DELETE operations",
     );
-
     await expectRejected(
       client,
       () =>

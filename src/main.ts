@@ -1,5 +1,6 @@
 import { BuilderAdapterRegistry } from "./agents/builder-adapter.js";
 import { DryRunBuilderAdapter } from "./agents/dry-run-builder-adapter.js";
+import { createWorkspaceCommandRuntime } from "./commands/workspace-command-runtime.js";
 import { loadConfig } from "./config.js";
 import { createPool } from "./db/pool.js";
 import { attachAiBudgetRoute } from "./http/ai-budget-route.js";
@@ -9,6 +10,7 @@ import { attachProviderDispatchRoute } from "./http/provider-dispatch-route.js";
 import { attachRepositoryWorkspaceRoute } from "./http/repository-workspace-route.js";
 import { createControlPlaneServer } from "./http/server.js";
 import { attachTaskContextPackRoute } from "./http/task-context-pack-route.js";
+import { attachWorkspaceCommandRoute } from "./http/workspace-command-route.js";
 import { createRepositoryWorkspaceRuntime } from "./repository/repository-workspace-runtime.js";
 import { BuilderRuntimeService } from "./services/builder-runtime-service.js";
 import { ExtendedPostgresControlPlaneStore } from "./store/extended-postgres-store.js";
@@ -23,6 +25,7 @@ const builderRuntimeService = new BuilderRuntimeService(
   builderAdapters,
 );
 const repositoryWorkspaceRuntime = createRepositoryWorkspaceRuntime(pool);
+const workspaceCommandRuntime = createWorkspaceCommandRuntime(pool);
 const server = createControlPlaneServer(config, store);
 attachContractAuthorizationRoute(server, config, store);
 attachAiBudgetRoute(server, config, store);
@@ -34,6 +37,12 @@ attachRepositoryWorkspaceRoute(
   config,
   repositoryWorkspaceRuntime.store,
   repositoryWorkspaceRuntime.service,
+);
+attachWorkspaceCommandRoute(
+  server,
+  config,
+  workspaceCommandRuntime.store,
+  workspaceCommandRuntime.service,
 );
 
 async function shutdown(signal: string): Promise<void> {

@@ -110,3 +110,6 @@ jobs:
 
       - name: Verify isolated repository workspaces and scope enforcement
         run: npm run verify:repository-workspace
+
+      - name: Verify bounded workspace command execution and evidence
+        run: npm run verify:workspace-command
