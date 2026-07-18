@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { sha256Json, type JsonValue } from "./stable-json.js";
 import { normalizeRelevantPaths } from "./task-context-pack.js";
 
 export const REPOSITORY_WORKSPACE_MODES = ["READ_ONLY", "WRITE"] as const;
@@ -24,6 +25,20 @@ export interface RepositoryWorkspaceScopeResult {
 export interface RepositoryWorkspacePlanIdentity {
   readonly workspaceKey: string;
   readonly branchName: string;
+}
+
+export interface RepositoryWorkspacePlanContent {
+  readonly schemaVersion: "karsift-repository-workspace-plan-v1";
+  readonly builderInvocationId: string;
+  readonly executionAttemptId: string;
+  readonly taskContextPackId: string;
+  readonly taskContextPackHash: string;
+  readonly repositoryFullName: string;
+  readonly baseBranch: string;
+  readonly baseCommitSha: string;
+  readonly relevantPaths: readonly string[];
+  readonly mode: RepositoryWorkspaceMode;
+  readonly adapterKey: string;
 }
 
 export function normalizeWorkspaceScope(
@@ -67,6 +82,39 @@ export function evaluateWorkspaceScope(input: {
     (path) => !isPathWithinWorkspaceScope(path, allowedPaths),
   );
   return { valid: violations.length === 0, violations };
+}
+
+export function buildRepositoryWorkspacePlanContent(input: {
+  readonly builderInvocationId: string;
+  readonly executionAttemptId: string;
+  readonly taskContextPackId: string;
+  readonly taskContextPackHash: string;
+  readonly repositoryFullName: string;
+  readonly baseBranch: string;
+  readonly baseCommitSha: string;
+  readonly relevantPaths: readonly string[];
+  readonly mode: RepositoryWorkspaceMode;
+  readonly adapterKey: string;
+}): RepositoryWorkspacePlanContent {
+  return {
+    schemaVersion: "karsift-repository-workspace-plan-v1",
+    builderInvocationId: input.builderInvocationId,
+    executionAttemptId: input.executionAttemptId,
+    taskContextPackId: input.taskContextPackId,
+    taskContextPackHash: input.taskContextPackHash,
+    repositoryFullName: input.repositoryFullName,
+    baseBranch: input.baseBranch,
+    baseCommitSha: input.baseCommitSha,
+    relevantPaths: normalizeWorkspaceScope(input.relevantPaths),
+    mode: input.mode,
+    adapterKey: input.adapterKey,
+  };
+}
+
+export function hashRepositoryWorkspacePlan(
+  content: RepositoryWorkspacePlanContent,
+): string {
+  return sha256Json(content as unknown as JsonValue);
 }
 
 export function repositoryWorkspaceIdentity(planHash: string): RepositoryWorkspacePlanIdentity {
