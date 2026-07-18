@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: control-plane-ci-${{ github.event.pull_request.number || github.ref }}
@@ -40,10 +40,8 @@ jobs:
       FOUNDER_API_TOKEN: ci-founder-token-not-for-production
 
     steps:
-      - name: Checkout candidate branch
+      - name: Checkout candidate
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Set up exact Node.js runtime
         uses: actions/setup-node@v6
@@ -56,27 +54,7 @@ jobs:
           node --version
           npm --version
 
-      - name: Ensure dependency lock exists
-        id: lockfile
-        shell: bash
-        run: |
-          if [[ -f package-lock.json ]]; then
-            echo "generated=false" >> "$GITHUB_OUTPUT"
-          else
-            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-            echo "generated=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Commit generated dependency lock
-        if: steps.lockfile.outputs.generated == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git commit -m "ADP-002 lock exact dependencies"
-          git push origin "HEAD:${GITHUB_HEAD_REF}"
-
-      - name: Install exact locked dependencies
+      - name: Install committed locked dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Run deterministic TypeScript and unit checks
