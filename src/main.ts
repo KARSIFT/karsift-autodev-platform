@@ -1,11 +1,11 @@
 import { loadConfig } from "./config.js";
 import { createPool } from "./db/pool.js";
 import { createControlPlaneServer } from "./http/server.js";
-import { PostgresControlPlaneStore } from "./store/postgres-store.js";
+import { ExtendedPostgresControlPlaneStore } from "./store/extended-postgres-store.js";
 
 const config = loadConfig();
 const pool = createPool(config.databaseUrl);
-const store = new PostgresControlPlaneStore(pool);
+const store = new ExtendedPostgresControlPlaneStore(pool);
 const server = createControlPlaneServer(config, store);
 
 async function shutdown(signal: string): Promise<void> {
