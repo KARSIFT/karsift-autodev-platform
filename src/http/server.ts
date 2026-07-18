@@ -15,6 +15,7 @@ import type { WorkflowStatus } from "../domain/workflow-state.js";
 import { authenticateBearerToken } from "../security/auth.js";
 import { isFounderInterfaceRouteAllowed } from "../security/authorization.js";
 import type { ControlPlaneStore } from "../store/types.js";
+import type { FreshnessValidationStore } from "../store/freshness-validation-types.js";
 import type { WorkQueueStore } from "../store/work-queue-types.js";
 import { ValidationError } from "./errors.js";
 import { createFounderOpenApiDocument } from "./founder-openapi.js";
@@ -112,7 +113,7 @@ function isWorkflowStatus(value: string): value is WorkflowStatus {
 
 export function createControlPlaneServer(
   config: AppConfig,
-  store: ControlPlaneStore & WorkQueueStore,
+  store: ControlPlaneStore & WorkQueueStore & FreshnessValidationStore,
 ) {
   return createServer(async (request, response) => {
     const method = request.method ?? "GET";
@@ -404,6 +405,19 @@ export function createControlPlaneServer(
           expectedStateVersion: requiredInteger(body, "expectedStateVersion"),
           eligible,
           waitingReason,
+          actor,
+        });
+        sendJson(response, 200, result);
+        return;
+      }
+
+      const workQueueValidation = matchPath(
+        url.pathname,
+        "/v1/work-queue/:workQueueItemId/validate",
+      );
+      if (method === "POST" && workQueueValidation) {
+        const result = await store.validateWorkQueueItem({
+          workQueueItemId: workQueueValidation.params.workQueueItemId ?? "",
           actor,
         });
         sendJson(response, 200, result);
