@@ -457,7 +457,7 @@ try {
   await commandService.run({ workspaceCommandRunId: outputRunId, actor });
   const outputFinal = await commandStore.getWorkspaceCommandRun(outputRunId);
   assert.equal(outputFinal.status, "SUCCEEDED");
-  assert.equal(outputFinal.evidence.stdout_bytes, "10000");
+  assert.equal(outputFinal.evidence.stdout_bytes, 10_000);
   assert.equal(outputFinal.evidence.stdout_truncated, true);
 
   const timeoutPrepared = await commandStore.prepareWorkspaceCommand({
