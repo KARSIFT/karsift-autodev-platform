@@ -1,0 +1,52 @@
+name: ADP-013 Integration Cleanup
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.head_ref == 'change/ADP-013-repository-workspaces'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Verify integration patch landed
+        id: ready
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          checks = [
+              ('src/main.ts', 'attachRepositoryWorkspaceRoute'),
+              ('Dockerfile', 'apk add --no-cache git'),
+              ('package.json', 'verify:repository-workspace'),
+              ('.github/workflows/control-plane-ci.yml', 'Verify isolated repository workspaces and scope enforcement'),
+              ('scripts/verify-postgres-foundation.mjs', '0010_repository_workspaces.sql'),
+          ]
+          ready = all(marker in Path(path).read_text() for path, marker in checks)
+          with open(Path.cwd() / 'cleanup-ready.txt', 'w') as handle:
+              handle.write('true' if ready else 'false')
+          PY
+          echo "ready=$(cat cleanup-ready.txt)" >> "$GITHUB_OUTPUT"
+      - name: Remove temporary write-capable workflows
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          rm -f .github/workflows/adp013-integration-patch.yml
+          rm -f .github/workflows/adp013-cleanup.yml
+          rm -f cleanup-ready.txt
+      - name: Commit clean candidate
+        if: steps.ready.outputs.ready == 'true'
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "ADP-013 remove temporary integration workflows"
+          git push origin HEAD:${{ github.head_ref }}
