@@ -325,7 +325,7 @@ try {
   const evidence = await pool.query(
     `SELECT work_item.state_version,
             validation.id AS validation_id,
-            authorization.id AS authorization_id,
+            auth_evidence.id AS authorization_id,
             budget.id AS budget_id
        FROM work_queue_items work_item
        JOIN tasks task
@@ -352,7 +352,7 @@ try {
             AND decision IN ('AUTHORIZED', 'REVOKED')
           ORDER BY created_at DESC, id DESC
           LIMIT 1
-       ) authorization ON true
+       ) auth_evidence ON true
        JOIN LATERAL (
          SELECT id
            FROM ai_budget_decisions
