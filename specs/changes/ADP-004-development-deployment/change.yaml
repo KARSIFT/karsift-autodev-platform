@@ -1,0 +1,43 @@
+schema_version: 1
+id: ADP-004
+title: Development VPS Deployment Package
+type: deployment-foundation
+status: implementing
+risk: R3
+origin:
+  type: founder_request
+  issue: 8
+authority:
+  decision_owner: founder
+  implementation_mode: governed
+  founder_approval_required_before_merge: false
+scope:
+  in_scope:
+    - reproducible_control_plane_container
+    - development_compose_stack
+    - private_postgresql_network
+    - automatic_https_ingress
+    - persistent_database_and_tls_volumes
+    - runtime_secret_injection
+    - deployment_runbook
+    - deployment_security_tests
+    - ci_compose_and_container_validation
+  out_of_scope:
+    - vps_purchase_or_provisioning
+    - dns_changes
+    - committed_secrets
+    - provider_specific_infrastructure_as_code
+    - production_deployment
+    - automated_production_release
+    - autonomous_worker_dispatch
+activation:
+  current_level: A1
+  resulting_level: A1
+  capabilities_enabled_by_this_change: []
+implementation:
+  branch: change/ADP-004-development-deployment
+  issue: 8
+artifacts:
+  specification: specification.md
+  acceptance_criteria: acceptance-criteria.md
+  implementation_plan: implementation-plan.md
