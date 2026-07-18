@@ -1,0 +1,46 @@
+schema_version: 1
+id: ADP-006
+title: Freshness and Continuing Authority Validation
+type: execution-safety-gate
+status: implementing
+risk: R3
+origin:
+  type: founder_request
+  issue: 12
+authority:
+  decision_owner: founder
+  implementation_mode: governed
+  founder_approval_required_before_merge: false
+scope:
+  in_scope:
+    - append_only_work_validation_evidence
+    - exact_queue_state_version_binding
+    - project_status_validation
+    - task_status_validation
+    - exact_change_contract_version_and_hash_validation
+    - continuing_contract_authority_check
+    - deterministic_blocking_staleness_supersession
+    - lease_claim_requires_current_valid_evidence
+    - internal_validation_api
+    - validation_status_observability
+    - deterministic_and_postgresql_validation_tests
+  out_of_scope:
+    - change_contract_authority_granting
+    - authority_policy_engine
+    - ai_semantic_freshness_review
+    - budget_governor
+    - ai_provider_calls
+    - automatic_ai_dispatch
+    - task_context_packages
+    - automatic_merge
+activation:
+  current_level: A1
+  resulting_level: A1
+  capabilities_enabled_by_this_change: []
+implementation:
+  branch: change/ADP-006-freshness-authority-validation
+  issue: 12
+artifacts:
+  specification: specification.md
+  acceptance_criteria: acceptance-criteria.md
+  implementation_plan: implementation-plan.md
