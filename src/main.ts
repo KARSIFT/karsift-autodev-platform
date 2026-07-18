@@ -6,8 +6,10 @@ import { attachAiBudgetRoute } from "./http/ai-budget-route.js";
 import { attachBuilderRuntimeRoute } from "./http/builder-runtime-route.js";
 import { attachContractAuthorizationRoute } from "./http/contract-authorization-route.js";
 import { attachProviderDispatchRoute } from "./http/provider-dispatch-route.js";
+import { attachRepositoryWorkspaceRoute } from "./http/repository-workspace-route.js";
 import { createControlPlaneServer } from "./http/server.js";
 import { attachTaskContextPackRoute } from "./http/task-context-pack-route.js";
+import { createRepositoryWorkspaceRuntime } from "./repository/repository-workspace-runtime.js";
 import { BuilderRuntimeService } from "./services/builder-runtime-service.js";
 import { ExtendedPostgresControlPlaneStore } from "./store/extended-postgres-store.js";
 
@@ -20,12 +22,19 @@ const builderRuntimeService = new BuilderRuntimeService(
   store,
   builderAdapters,
 );
+const repositoryWorkspaceRuntime = createRepositoryWorkspaceRuntime(pool);
 const server = createControlPlaneServer(config, store);
 attachContractAuthorizationRoute(server, config, store);
 attachAiBudgetRoute(server, config, store);
 attachProviderDispatchRoute(server, config, store);
 attachTaskContextPackRoute(server, config, store);
 attachBuilderRuntimeRoute(server, config, store, builderRuntimeService);
+attachRepositoryWorkspaceRoute(
+  server,
+  config,
+  repositoryWorkspaceRuntime.store,
+  repositoryWorkspaceRuntime.service,
+);
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; shutting down`);
