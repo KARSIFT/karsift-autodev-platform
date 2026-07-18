@@ -3,6 +3,7 @@ import type { RepositoryWorkspaceMode } from "../domain/repository-workspace.js"
 export interface MaterializeRepositoryWorkspaceInput {
   readonly sourceRepositoryPath: string;
   readonly workspacePath: string;
+  readonly baseBranch: string;
   readonly baseCommitSha: string;
   readonly branchName: string;
   readonly mode: RepositoryWorkspaceMode;
