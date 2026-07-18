@@ -113,3 +113,6 @@ jobs:
 
       - name: Verify bounded workspace command execution and evidence
         run: npm run verify:workspace-command
+
+      - name: Verify structured workspace mutations and atomic file evidence
+        run: npm run verify:workspace-mutation
