@@ -12,8 +12,10 @@ import { createControlPlaneServer } from "./http/server.js";
 import { attachTaskContextPackRoute } from "./http/task-context-pack-route.js";
 import { attachWorkspaceCommandRoute } from "./http/workspace-command-route.js";
 import { attachWorkspaceMutationRoute } from "./http/workspace-mutation-route.js";
+import { attachWorkspaceReadContextRoute } from "./http/workspace-read-context-route.js";
 import { createRepositoryWorkspaceRuntime } from "./repository/repository-workspace-runtime.js";
 import { createWorkspaceMutationRuntime } from "./repository/workspace-mutation-runtime.js";
+import { createWorkspaceReadContextRuntime } from "./repository/workspace-read-context-runtime.js";
 import { BuilderRuntimeService } from "./services/builder-runtime-service.js";
 import { ExtendedPostgresControlPlaneStore } from "./store/extended-postgres-store.js";
 
@@ -29,6 +31,7 @@ const builderRuntimeService = new BuilderRuntimeService(
 const repositoryWorkspaceRuntime = createRepositoryWorkspaceRuntime(pool);
 const workspaceCommandRuntime = createWorkspaceCommandRuntime(pool);
 const workspaceMutationRuntime = createWorkspaceMutationRuntime(pool);
+const workspaceReadContextRuntime = createWorkspaceReadContextRuntime(pool);
 const server = createControlPlaneServer(config, store);
 attachContractAuthorizationRoute(server, config, store);
 attachAiBudgetRoute(server, config, store);
@@ -52,6 +55,12 @@ attachWorkspaceMutationRoute(
   config,
   workspaceMutationRuntime.store,
   workspaceMutationRuntime.service,
+);
+attachWorkspaceReadContextRoute(
+  server,
+  config,
+  workspaceReadContextRuntime.store,
+  workspaceReadContextRuntime.service,
 );
 
 async function shutdown(signal: string): Promise<void> {
