@@ -1,0 +1,37 @@
+id: ADP-007
+slug: governed-contract-authorization
+status: implemented
+risk: R3
+owner: karsift-control-plane
+issue: 14
+objective: >-
+  Replace mutable Change Contract status as execution authority with append-only,
+  exact-version authorization decisions evaluated under deterministic R0-R4 policy.
+activation_level_before: A1
+activation_level_after: A1
+capabilities_enabled: []
+capabilities_remaining_disabled:
+  - AUTOMATED_WRITE
+  - AI_DISPATCH
+  - AUTO_MERGE
+  - DEPLOYMENT
+  - PRODUCTION_RELEASE
+  - INCIDENT_REPAIR
+in_scope:
+  - exact-version authorization evidence
+  - deterministic R0-R4 authorization policy
+  - R4 founder-only authorization
+  - R3 strengthened-gate requirement for system authorization
+  - founder and EHR escalation conditions
+  - explicit revocation
+  - freshness integration
+  - database execution-attempt authorization gate
+  - least-privilege authorization HTTP route
+out_of_scope:
+  - AI risk classification
+  - AI budget governance
+  - provider dispatch
+  - task context packs
+  - verification agents
+  - automatic merge
+  - deployment or production release

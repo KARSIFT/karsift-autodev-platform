@@ -35,6 +35,7 @@ interface ValidationContextRow extends QueryResultRow {
   readonly contract_content_hash: string;
   readonly contract_status: FreshnessFacts["contractStatus"];
   readonly current_contract_version: number;
+  readonly effective_authorization: boolean;
 }
 
 async function appendAudit(
@@ -105,7 +106,8 @@ export class PostgresFreshnessValidationStore
            v.version AS change_contract_version,
            v.content_hash AS contract_content_hash,
            c.status AS contract_status,
-           c.current_version AS current_contract_version
+           c.current_version AS current_contract_version,
+           COALESCE(auth.decision = 'AUTHORIZED', false) AS effective_authorization
          FROM work_queue_items w
          JOIN projects p ON p.id = w.project_id
          JOIN tasks t ON t.id = w.task_id AND t.project_id = w.project_id
@@ -115,6 +117,17 @@ export class PostgresFreshnessValidationStore
          JOIN change_contracts c
            ON c.id = v.contract_id
           AND c.project_id = w.project_id
+         LEFT JOIN LATERAL (
+           SELECT auth_decision.decision
+             FROM change_contract_authorization_decisions auth_decision
+            WHERE auth_decision.project_id = w.project_id
+              AND auth_decision.change_contract_id = c.id
+              AND auth_decision.change_contract_version_id = v.id
+              AND auth_decision.contract_content_hash = v.content_hash
+              AND auth_decision.decision IN ('AUTHORIZED', 'REVOKED')
+            ORDER BY auth_decision.created_at DESC, auth_decision.id DESC
+            LIMIT 1
+         ) auth ON true
          WHERE w.id = $1
          FOR UPDATE OF w`,
         [input.workQueueItemId],
@@ -137,12 +150,12 @@ export class PostgresFreshnessValidationStore
         contractStatus: context.contract_status,
         contractVersion: context.change_contract_version,
         currentContractVersion: context.current_contract_version,
+        effectiveAuthorization: context.effective_authorization,
       });
 
       const shouldChangeQueue =
         context.work_status !== decision.targetStatus ||
         context.waiting_reason !== decision.waitingReason;
-
       let resultingStateVersion = context.state_version;
       let workItem: Record<string, unknown>;
 
@@ -177,6 +190,7 @@ export class PostgresFreshnessValidationStore
         contractStatus: context.contract_status,
         contractVersion: context.change_contract_version,
         currentContractVersion: context.current_contract_version,
+        effectiveAuthorization: context.effective_authorization,
       } as const;
 
       const validationResult = await client.query(
@@ -227,6 +241,7 @@ export class PostgresFreshnessValidationStore
           reasonCode: decision.reasonCode,
           changeContractVersionId: context.change_contract_version_id,
           contractContentHash: context.contract_content_hash,
+          effectiveAuthorization: context.effective_authorization,
         },
       });
 

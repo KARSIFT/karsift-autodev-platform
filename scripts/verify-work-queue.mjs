@@ -41,17 +41,29 @@ try {
   const contractBundle = await store.createChangeContract({
     projectId,
     stableId: `CI-QUEUE-${suffix}`,
-    content: { objective: "verify duplicate-safe work queue" },
+    content: {
+      objective: "verify duplicate-safe work queue",
+      governance: {
+        riskLevel: "R2",
+        founderApprovalRequired: false,
+        ehrRequired: false,
+        strengthenedGatesSatisfied: false,
+        protectedTechnicalWork: false,
+      },
+    },
     actor,
   });
   const version = contractBundle.version;
   assert.equal(typeof version, "object");
   const versionId = String(version.id);
 
-  await pool.query(
-    "UPDATE change_contracts SET status = 'AUTHORIZED' WHERE id = $1",
-    [contractBundle.contract.id],
-  );
+  const authorization = await store.recordChangeContractAuthorization({
+    changeContractId: String(contractBundle.contract.id),
+    action: "AUTHORIZE",
+    rationale: "CI queue authorization",
+    actor,
+  });
+  assert.equal(authorization.authorized, true);
 
   const task = await store.createTask({
     projectId,

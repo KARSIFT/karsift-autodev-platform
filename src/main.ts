@@ -1,5 +1,6 @@
 import { loadConfig } from "./config.js";
 import { createPool } from "./db/pool.js";
+import { attachContractAuthorizationRoute } from "./http/contract-authorization-route.js";
 import { createControlPlaneServer } from "./http/server.js";
 import { ExtendedPostgresControlPlaneStore } from "./store/extended-postgres-store.js";
 
@@ -7,6 +8,7 @@ const config = loadConfig();
 const pool = createPool(config.databaseUrl);
 const store = new ExtendedPostgresControlPlaneStore(pool);
 const server = createControlPlaneServer(config, store);
+attachContractAuthorizationRoute(server, config, store);
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; shutting down`);

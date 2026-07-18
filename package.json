@@ -14,8 +14,9 @@
     "migrate": "node dist/db/migrate.js",
     "verify:postgres": "node scripts/verify-postgres-foundation.mjs",
     "verify:queue": "node scripts/verify-work-queue.mjs",
-    "check": "npm run build && npm test",
-    "verify:freshness": "node scripts/verify-freshness-validation.mjs"
+    "verify:freshness": "node scripts/verify-freshness-validation.mjs",
+    "verify:authorization": "node scripts/verify-contract-authorization.mjs",
+    "check": "npm run build && npm test"
   },
   "dependencies": {
     "pg": "8.22.0"

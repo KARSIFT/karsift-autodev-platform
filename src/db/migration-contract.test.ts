@@ -42,7 +42,7 @@ test("work queue migration and store encode duplicate-safe lease constraints", a
   assert.doesNotMatch(migration, /^\s*COMMIT;/m);
 });
 
-test("freshness validation is append-only and lease claiming requires current valid evidence", async () => {
+test("freshness validation is append-only and bound to current queue evidence", async () => {
   const migration = await readFile(
     path.resolve(process.cwd(), "migrations/0003_work_freshness_validation.sql"),
     "utf8",
@@ -51,14 +51,43 @@ test("freshness validation is append-only and lease claiming requires current va
     path.resolve(process.cwd(), "src/store/work-queue-store.ts"),
     "utf8",
   );
+  const freshnessStore = await readFile(
+    path.resolve(process.cwd(), "src/store/freshness-validation-store.ts"),
+    "utf8",
+  );
 
   assert.match(migration, /CREATE TABLE IF NOT EXISTS work_validation_runs/);
   assert.match(migration, /work_validation_runs_immutable/);
   assert.match(migration, /queue_state_version integer NOT NULL/);
   assert.match(queueStore, /validation\.queue_state_version = w\.state_version/);
   assert.match(queueStore, /validation\.contract_content_hash = cv\.content_hash/);
-  assert.match(queueStore, /c\.status = 'AUTHORIZED'/);
   assert.match(queueStore, /cv\.version = c\.current_version/);
+  assert.match(freshnessStore, /effective_authorization/);
+  assert.match(freshnessStore, /change_contract_authorization_decisions/);
+  assert.doesNotMatch(migration, /^\s*BEGIN;/m);
+  assert.doesNotMatch(migration, /^\s*COMMIT;/m);
+});
+
+test("authorization migration makes append-only exact-version authority the execution gate", async () => {
+  const migration = await readFile(
+    path.resolve(process.cwd(), "migrations/0004_change_contract_authorization.sql"),
+    "utf8",
+  );
+  const policy = await readFile(
+    path.resolve(process.cwd(), "src/domain/contract-authorization.ts"),
+    "utf8",
+  );
+
+  assert.match(
+    migration,
+    /CREATE TABLE IF NOT EXISTS change_contract_authorization_decisions/,
+  );
+  assert.match(migration, /change_contract_authorization_decisions_immutable/);
+  assert.match(migration, /has_effective_change_contract_authorization/);
+  assert.match(migration, /execution_attempt_authorization_gate/);
+  assert.match(migration, /decision IN \('AUTHORIZED', 'REVOKED'\)/);
+  assert.match(policy, /facts\.riskLevel === "R4"/);
+  assert.match(policy, /R3_STRENGTHENED_GATES_REQUIRED/);
   assert.doesNotMatch(migration, /^\s*BEGIN;/m);
   assert.doesNotMatch(migration, /^\s*COMMIT;/m);
 });

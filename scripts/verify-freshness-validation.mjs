@@ -15,6 +15,14 @@ const store = new ExtendedPostgresControlPlaneStore(pool);
 const actor = { type: "SYSTEM", id: "ci-freshness-verifier" };
 const suffix = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
 
+const governance = {
+  riskLevel: "R2",
+  founderApprovalRequired: false,
+  ehrRequired: false,
+  strengthenedGatesSatisfied: false,
+  protectedTechnicalWork: false,
+};
+
 async function expectRejected(operation, message) {
   let rejected = false;
   try {
@@ -41,7 +49,7 @@ try {
   const contractBundle = await store.createChangeContract({
     projectId,
     stableId: `CI-FRESH-${suffix}`,
-    content: { objective: "verify freshness gating" },
+    content: { objective: "verify freshness gating", governance },
     actor,
   });
   const contractId = String(contractBundle.contract.id);
@@ -84,10 +92,14 @@ try {
   });
   assert.equal(claimWithoutAuthority, null);
 
-  await pool.query(
-    "UPDATE change_contracts SET status = 'AUTHORIZED' WHERE id = $1",
-    [contractId],
-  );
+  const firstAuthorization = await store.recordChangeContractAuthorization({
+    changeContractId: contractId,
+    action: "AUTHORIZE",
+    rationale: "CI R2 authorization",
+    actor,
+  });
+  assert.equal(firstAuthorization.authorized, true);
+  assert.equal(firstAuthorization.decision.decision, "AUTHORIZED");
 
   const authorized = await store.validateWorkQueueItem({
     workQueueItemId: workOneId,
@@ -147,7 +159,7 @@ try {
 
   const versionTwo = await store.appendChangeContractVersion({
     contractId,
-    content: { objective: "newer authorized contract version" },
+    content: { objective: "newer authorized contract version", governance },
     actor,
   });
   assert.equal(versionTwo.version, 2);
@@ -188,16 +200,28 @@ try {
   });
   const workTwoId = String(workTwo.id);
 
+  const secondAuthorization = await store.recordChangeContractAuthorization({
+    changeContractId: contractId,
+    action: "AUTHORIZE",
+    rationale: "Authorize current CI version",
+    actor,
+  });
+  assert.equal(secondAuthorization.authorized, true);
+
   const currentValidation = await store.validateWorkQueueItem({
     workQueueItemId: workTwoId,
     actor,
   });
   assert.equal(currentValidation.validation.outcome, "VALID");
 
-  await pool.query(
-    "UPDATE change_contracts SET status = 'CANCELLED' WHERE id = $1",
-    [contractId],
-  );
+  const revocation = await store.recordChangeContractAuthorization({
+    changeContractId: contractId,
+    action: "REVOKE",
+    rationale: "Prove post-validation continuing-authority check",
+    actor,
+  });
+  assert.equal(revocation.authorized, false);
+  assert.equal(revocation.decision.decision, "REVOKED");
 
   const revokedAfterValidation = await store.claimExecutionLease({
     projectId,
@@ -209,6 +233,18 @@ try {
     revokedAfterValidation,
     null,
     "claim must re-check continuing authority after validation",
+  );
+
+  const revokedValidation = await store.validateWorkQueueItem({
+    workQueueItemId: workTwoId,
+    actor,
+  });
+  assert.equal(revokedValidation.validation.outcome, "BLOCKED");
+  assert.equal(revokedValidation.validation.reason_code, "CONTRACT_NOT_AUTHORIZED");
+
+  await pool.query(
+    "UPDATE change_contracts SET status = 'CANCELLED' WHERE id = $1",
+    [contractId],
   );
 
   const superseded = await store.validateWorkQueueItem({

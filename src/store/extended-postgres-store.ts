@@ -1,5 +1,10 @@
 import type { Pool } from "pg";
 
+import { PostgresContractAuthorizationStore } from "./contract-authorization-store.js";
+import type {
+  ContractAuthorizationStore,
+  RecordChangeContractAuthorizationInput,
+} from "./contract-authorization-types.js";
 import { PostgresControlPlaneStore } from "./postgres-store.js";
 import { PostgresFreshnessValidationStore } from "./freshness-validation-store.js";
 import type {
@@ -19,15 +24,17 @@ import type {
 
 export class ExtendedPostgresControlPlaneStore
   extends PostgresControlPlaneStore
-  implements WorkQueueStore, FreshnessValidationStore
+  implements WorkQueueStore, FreshnessValidationStore, ContractAuthorizationStore
 {
   private readonly workQueue: PostgresWorkQueueStore;
   private readonly freshnessValidation: PostgresFreshnessValidationStore;
+  private readonly contractAuthorization: PostgresContractAuthorizationStore;
 
   public constructor(pool: Pool) {
     super(pool);
     this.workQueue = new PostgresWorkQueueStore(pool);
     this.freshnessValidation = new PostgresFreshnessValidationStore(pool);
+    this.contractAuthorization = new PostgresContractAuthorizationStore(pool);
   }
 
   public createWorkQueueItem(input: CreateWorkQueueItemInput) {
@@ -74,21 +81,37 @@ export class ExtendedPostgresControlPlaneStore
     return this.freshnessValidation.getPlatformValidationStatus();
   }
 
+  public recordChangeContractAuthorization(
+    input: RecordChangeContractAuthorizationInput,
+  ) {
+    return this.contractAuthorization.recordChangeContractAuthorization(input);
+  }
+
+  public getProjectAuthorizationStatus(projectId: string) {
+    return this.contractAuthorization.getProjectAuthorizationStatus(projectId);
+  }
+
+  public getPlatformAuthorizationStatus() {
+    return this.contractAuthorization.getPlatformAuthorizationStatus();
+  }
+
   public override async getProjectStatus(projectId: string) {
-    const [base, queue, validation] = await Promise.all([
+    const [base, queue, validation, authorization] = await Promise.all([
       super.getProjectStatus(projectId),
       this.workQueue.getProjectQueueStatus(projectId),
       this.freshnessValidation.getProjectValidationStatus(projectId),
+      this.contractAuthorization.getProjectAuthorizationStatus(projectId),
     ]);
-    return { ...base, ...queue, ...validation };
+    return { ...base, ...queue, ...validation, ...authorization };
   }
 
   public override async getPlatformStatus() {
-    const [base, queue, validation] = await Promise.all([
+    const [base, queue, validation, authorization] = await Promise.all([
       super.getPlatformStatus(),
       this.workQueue.getPlatformQueueStatus(),
       this.freshnessValidation.getPlatformValidationStatus(),
+      this.contractAuthorization.getPlatformAuthorizationStatus(),
     ]);
-    return { ...base, ...queue, ...validation };
+    return { ...base, ...queue, ...validation, ...authorization };
   }
 }
