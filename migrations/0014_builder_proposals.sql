@@ -239,11 +239,10 @@ BEGIN
            OR claim_row.builder_invocation_id <> OLD.builder_invocation_id
            OR claim_row.status <> 'ACTIVE'
            OR claim_row.lease_expires_at <= now()
-           OR claim_row.revalidation_id <> NEW.builder_dispatch_revalidation_id
            OR revalidation_row.id IS NULL
            OR revalidation_row.builder_dispatch_claim_id <> NEW.builder_dispatch_claim_id
            OR revalidation_row.outcome <> 'READY'
-           OR revalidation_row.selected_provider_key <> request_row.provider_key THEN
+           OR revalidation_row.provider_key <> request_row.provider_key THEN
             RAISE EXCEPTION 'Builder proposal run conflict: active READY dispatch evidence does not match';
         END IF;
 
