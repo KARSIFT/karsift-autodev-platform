@@ -13,6 +13,8 @@ interface WorkQueueRow extends QueryResultRow {
   readonly work_validation_run_id: string;
   readonly change_contract_authorization_decision_id: string;
   readonly ai_budget_decision_id: string;
+  readonly execution_class: string;
+  readonly provider_dispatch_decision_id: string | null;
 }
 
 async function appendAudit(
@@ -95,7 +97,9 @@ export class PostgresBudgetAwareLeaseStore {
            w.idempotency_key,
            latest_validation.id AS work_validation_run_id,
            latest_authorization.id AS change_contract_authorization_decision_id,
-           latest_budget.id AS ai_budget_decision_id
+           latest_budget.id AS ai_budget_decision_id,
+           latest_budget.execution_class,
+           latest_dispatch.id AS provider_dispatch_decision_id
          FROM work_queue_items w
          JOIN projects p ON p.id = w.project_id
          JOIN tasks t ON t.id = w.task_id AND t.project_id = w.project_id
@@ -139,6 +143,24 @@ export class PostgresBudgetAwareLeaseStore {
             ORDER BY budget_decision.created_at DESC, budget_decision.id DESC
             LIMIT 1
          ) latest_budget ON latest_budget.decision = 'APPROVED'
+         LEFT JOIN LATERAL (
+           SELECT dispatch_decision.id,
+                  dispatch_decision.outcome,
+                  dispatch_decision.waiting_reason,
+                  observation.status AS observation_status,
+                  observation.expires_at AS observation_expires_at
+             FROM ai_provider_dispatch_decisions dispatch_decision
+             LEFT JOIN ai_provider_capacity_observations observation
+               ON observation.id = dispatch_decision.capacity_observation_id
+              AND observation.project_id = dispatch_decision.project_id
+            WHERE dispatch_decision.work_queue_item_id = w.id
+              AND dispatch_decision.project_id = w.project_id
+              AND dispatch_decision.queue_state_version = w.state_version
+              AND dispatch_decision.ai_budget_decision_id = latest_budget.id
+              AND dispatch_decision.capability = 'CODE_BUILDER'
+            ORDER BY dispatch_decision.created_at DESC, dispatch_decision.id DESC
+            LIMIT 1
+         ) latest_dispatch ON true
          WHERE w.status = 'ELIGIBLE'
            AND ($1::uuid IS NULL OR w.project_id = $1::uuid)
            AND (w.scheduled_for IS NULL OR w.scheduled_for <= now())
@@ -159,6 +181,10 @@ export class PostgresBudgetAwareLeaseStore {
                     AND reservation.queue_state_version = w.state_version
                     AND reservation.status = 'RESERVED'
                )
+               AND latest_dispatch.outcome = 'READY'
+               AND latest_dispatch.waiting_reason = 'NONE'
+               AND latest_dispatch.observation_status = 'HEALTHY'
+               AND latest_dispatch.observation_expires_at > now()
              )
            )
          ORDER BY
@@ -200,7 +226,8 @@ export class PostgresBudgetAwareLeaseStore {
           claim_queue_state_version,
           work_validation_run_id,
           change_contract_authorization_decision_id,
-          ai_budget_decision_id
+          ai_budget_decision_id,
+          provider_dispatch_decision_id
         ) VALUES (
           $1,
           $2,
@@ -211,7 +238,8 @@ export class PostgresBudgetAwareLeaseStore {
           $7,
           $8,
           $9,
-          $10
+          $10,
+          $11
         )
         RETURNING *`,
         [
@@ -225,6 +253,7 @@ export class PostgresBudgetAwareLeaseStore {
           candidate.work_validation_run_id,
           candidate.change_contract_authorization_decision_id,
           candidate.ai_budget_decision_id,
+          candidate.provider_dispatch_decision_id,
         ],
       );
 
@@ -256,6 +285,8 @@ export class PostgresBudgetAwareLeaseStore {
           changeContractAuthorizationDecisionId:
             candidate.change_contract_authorization_decision_id,
           aiBudgetDecisionId: candidate.ai_budget_decision_id,
+          executionClass: candidate.execution_class,
+          providerDispatchDecisionId: candidate.provider_dispatch_decision_id,
         },
       });
 

@@ -18,6 +18,7 @@
     "verify:authorization": "node scripts/verify-contract-authorization.mjs",
     "verify:budget": "node scripts/verify-ai-budget.mjs",
     "verify:context-pack": "node scripts/verify-task-context-pack.mjs",
+    "verify:provider": "node scripts/verify-provider-dispatch.mjs",
     "check": "npm run build && npm test"
   },
   "dependencies": {

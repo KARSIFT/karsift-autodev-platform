@@ -34,6 +34,9 @@ try {
     "ai_budget_decisions",
     "ai_budget_policies",
     "ai_budget_reservations",
+    "ai_provider_capacity_observations",
+    "ai_provider_dispatch_decisions",
+    "ai_provider_routing_policies",
     "audit_events",
     "capability_switches",
     "change_contract_authorization_decisions",
@@ -77,6 +80,7 @@ try {
       "0004_change_contract_authorization.sql",
       "0005_ai_budget_governor.sql",
       "0006_task_context_packs.sql",
+      "0007_provider_dispatch_readiness.sql",
     ],
     "all foundation migrations must be recorded exactly once",
   );

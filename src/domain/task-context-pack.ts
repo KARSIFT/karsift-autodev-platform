@@ -1,6 +1,6 @@
 import type { JsonValue } from "./stable-json.js";
 
-export const TASK_CONTEXT_PACK_SCHEMA_VERSION = "task-context-pack-v1";
+export const TASK_CONTEXT_PACK_SCHEMA_VERSION = "task-context-pack-v2";
 
 function isObject(
   value: JsonValue | undefined,

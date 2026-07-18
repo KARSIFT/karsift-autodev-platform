@@ -1,0 +1,11 @@
+change_id: ADP-010
+name: Provider Capacity and Dispatch Readiness
+issue: 20
+base_branch: develop
+risk_level: R3
+status: implementation_candidate
+activation_level_before: A1
+activation_level_after: A1
+enabled_capabilities: []
+merge_target: develop
+requires_exact_head_ci: true
