@@ -20,6 +20,8 @@ export class DryRunBuilderAdapter implements BuilderAdapter {
         externalProviderCalled: false,
         repositoryMutated: false,
         invocationId: input.invocationId,
+        dispatchClaimId: input.dispatchClaimId,
+        dispatchIdempotencyKey: input.dispatchIdempotencyKey,
         planHash: input.planHash,
         taskContextPackHash: input.taskContextPackHash,
         providerKey: input.providerKey,
