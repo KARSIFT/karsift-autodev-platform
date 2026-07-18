@@ -51,6 +51,9 @@ try {
     "execution_attempts",
     "founder_requests",
     "projects",
+    "repository_workspace_evidence",
+    "repository_workspace_plans",
+    "repository_workspaces",
     "schema_migrations",
     "task_context_packs",
     "tasks",
@@ -88,6 +91,7 @@ try {
       "0007_provider_dispatch_readiness.sql",
       "0008_controlled_builder_runtime.sql",
       "0009_atomic_builder_dispatch.sql",
+      "0010_repository_workspaces.sql",
     ],
     "all foundation migrations must be recorded exactly once",
   );
