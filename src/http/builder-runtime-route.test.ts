@@ -8,9 +8,14 @@ import { DryRunBuilderAdapter } from "../agents/dry-run-builder-adapter.js";
 import type { AppConfig } from "../config.js";
 import { BuilderRuntimeService } from "../services/builder-runtime-service.js";
 import type {
+  AcquireBuilderDispatchClaimInput,
+  BuilderDispatchStore,
   BuilderRuntimeStore,
+  CompleteBuilderDispatchClaimInput,
   CompleteBuilderInvocationInput,
+  HeartbeatBuilderDispatchClaimInput,
   PrepareBuilderInvocationInput,
+  ReleaseBuilderDispatchClaimInput,
   StartBuilderInvocationInput,
 } from "../store/builder-runtime-types.js";
 import { attachBuilderRuntimeRoute } from "./builder-runtime-route.js";
@@ -28,10 +33,12 @@ const config: AppConfig = {
   databaseUrl: "postgres://unused",
 };
 
-class FakeBuilderRuntimeStore implements BuilderRuntimeStore {
+class FakeBuilderRuntimeStore implements BuilderRuntimeStore, BuilderDispatchStore {
   public prepared: PrepareBuilderInvocationInput[] = [];
   public started: StartBuilderInvocationInput[] = [];
   public completed: CompleteBuilderInvocationInput[] = [];
+  public acquired: AcquireBuilderDispatchClaimInput[] = [];
+  public completedClaims: CompleteBuilderDispatchClaimInput[] = [];
 
   public async prepareBuilderInvocation(
     input: PrepareBuilderInvocationInput,
@@ -41,6 +48,53 @@ class FakeBuilderRuntimeStore implements BuilderRuntimeStore {
       plan: { id: "plan-1" },
       invocation: { id: "invocation-1", status: "PREPARED" },
     };
+  }
+
+  public async acquireBuilderDispatchClaim(
+    input: AcquireBuilderDispatchClaimInput,
+  ): Promise<Record<string, unknown>> {
+    this.acquired.push(input);
+    return {
+      acquired: true,
+      reason: "CLAIM_ACQUIRED",
+      claim: {
+        id: "claim-1",
+        claim_token: "11111111-1111-1111-1111-111111111111",
+        idempotency_key: `builder-dispatch:${"a".repeat(64)}`,
+      },
+      revalidation: {
+        outcome: "READY",
+        waiting_reason: "NONE",
+        reason_code: "PROVIDER_READY",
+      },
+    };
+  }
+
+  public async heartbeatBuilderDispatchClaim(
+    _input: HeartbeatBuilderDispatchClaimInput,
+  ): Promise<Record<string, unknown>> {
+    return {};
+  }
+
+  public async releaseBuilderDispatchClaim(
+    _input: ReleaseBuilderDispatchClaimInput,
+  ): Promise<Record<string, unknown>> {
+    return { status: "RELEASED" };
+  }
+
+  public async completeBuilderDispatchClaim(
+    input: CompleteBuilderDispatchClaimInput,
+  ): Promise<Record<string, unknown>> {
+    this.completedClaims.push(input);
+    return { id: input.builderDispatchClaimId, status: "COMPLETED" };
+  }
+
+  public async getProjectBuilderDispatchStatus(): Promise<Record<string, unknown>> {
+    return {};
+  }
+
+  public async getPlatformBuilderDispatchStatus(): Promise<Record<string, unknown>> {
+    return {};
   }
 
   public async startBuilderInvocation(
@@ -95,6 +149,7 @@ async function withServer(
 ): Promise<void> {
   const store = new FakeBuilderRuntimeStore();
   const service = new BuilderRuntimeService(
+    store,
     store,
     new BuilderAdapterRegistry([new DryRunBuilderAdapter()]),
   );
@@ -170,7 +225,7 @@ test("internal service can prepare a bounded builder invocation", async () => {
   });
 });
 
-test("internal dry-run execution uses the adapter lifecycle without side effects", async () => {
+test("internal dry-run execution acquires one dispatch claim before adapter execution", async () => {
   await withServer(async (baseUrl, store) => {
     const response = await fetch(
       `${baseUrl}/v1/builder-invocations/invocation-1/run-dry-run`,
@@ -180,14 +235,18 @@ test("internal dry-run execution uses the adapter lifecycle without side effects
       },
     );
     assert.equal(response.status, 200);
+    assert.equal(store.acquired.length, 1);
     assert.equal(store.started.length, 1);
     assert.equal(store.completed.length, 1);
+    assert.equal(store.completedClaims.length, 1);
     assert.equal(store.completed[0]?.result.outcome, "SUCCEEDED");
     assert.deepEqual(store.completed[0]?.result.evidence, {
       dryRun: true,
       externalProviderCalled: false,
       repositoryMutated: false,
       invocationId: "invocation-1",
+      dispatchClaimId: "claim-1",
+      dispatchIdempotencyKey: `builder-dispatch:${"a".repeat(64)}`,
       planHash: "a".repeat(64),
       taskContextPackHash: "b".repeat(64),
       providerKey: "dry-run-builder",
