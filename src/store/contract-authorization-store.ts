@@ -90,7 +90,8 @@ export class PostgresContractAuthorizationStore
   public async recordChangeContractAuthorization(
     input: RecordChangeContractAuthorizationInput,
   ): Promise<ContractAuthorizationResult> {
-    assertAuthorizationActor(input.actor);
+    const actor = input.actor;
+    assertAuthorizationActor(actor);
 
     return this.transaction(async (client) => {
       const contextResult = await client.query<ContractAuthorizationContextRow>(
@@ -118,7 +119,7 @@ export class PostgresContractAuthorizationStore
       }
 
       const facts = extractContractGovernanceFacts(context.content);
-      const policyDecision = evaluateContractAuthorization(facts, input.actor.type);
+      const policyDecision = evaluateContractAuthorization(facts, actor.type);
 
       let decision: "AUTHORIZED" | "DENIED" | "REVOKED";
       let reasonCode:
@@ -179,8 +180,8 @@ export class PostgresContractAuthorizationStore
           requiredAuthorityForFacts(facts),
           JSON.stringify(facts),
           input.rationale,
-          input.actor.type,
-          input.actor.id,
+          actor.type,
+          actor.id,
         ],
       );
 
@@ -207,7 +208,7 @@ export class PostgresContractAuthorizationStore
       const record = decisionResult.rows[0] as Record<string, unknown>;
       await appendAudit(client, {
         projectId: context.project_id,
-        actor: input.actor,
+        actor,
         action: `CHANGE_CONTRACT_AUTHORIZATION_${decision}`,
         entityType: "CHANGE_CONTRACT_AUTHORIZATION_DECISION",
         entityId: String(record.id),
