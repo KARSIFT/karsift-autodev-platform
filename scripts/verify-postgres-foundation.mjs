@@ -36,10 +36,12 @@ try {
     "change_contract_versions",
     "change_contracts",
     "decisions",
+    "execution_attempts",
     "founder_requests",
     "projects",
     "schema_migrations",
     "tasks",
+    "work_queue_items",
     "workflow_runs",
   ].sort();
 
@@ -54,7 +56,7 @@ try {
   assert.deepEqual(
     tables.rows.map((row) => row.table_name).sort(),
     expectedTables,
-    "foundation migration must create exactly the expected public tables",
+    "migrations must create exactly the expected public tables",
   );
 
   const migrations = await client.query(
@@ -62,8 +64,11 @@ try {
   );
   assert.deepEqual(
     migrations.rows.map((row) => row.filename),
-    ["0001_control_plane_foundation.sql"],
-    "foundation migration must be recorded exactly once",
+    [
+      "0001_control_plane_foundation.sql",
+      "0002_work_queue_execution_leases.sql",
+    ],
+    "all foundation migrations must be recorded exactly once",
   );
 
   const switches = await client.query(
