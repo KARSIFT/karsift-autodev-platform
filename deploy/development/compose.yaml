@@ -1,0 +1,72 @@
+name: karsift-autodev-development
+
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  control-plane:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CONTROL_PLANE_HOST: 0.0.0.0
+      CONTROL_PLANE_PORT: 8080
+      CONTROL_PLANE_PUBLIC_BASE_URL: https://${CONTROL_PLANE_DOMAIN:?CONTROL_PLANE_DOMAIN is required}
+      CONTROL_PLANE_API_TOKEN: ${CONTROL_PLANE_API_TOKEN:?CONTROL_PLANE_API_TOKEN is required}
+      CONTROL_PLANE_SERVICE_ID: ${CONTROL_PLANE_SERVICE_ID:-karsift-control-plane}
+      CONTROL_PLANE_FOUNDER_API_TOKEN: ${CONTROL_PLANE_FOUNDER_API_TOKEN:?CONTROL_PLANE_FOUNDER_API_TOKEN is required}
+      CONTROL_PLANE_FOUNDER_INTERFACE_API_TOKEN: ${CONTROL_PLANE_FOUNDER_INTERFACE_API_TOKEN:?CONTROL_PLANE_FOUNDER_INTERFACE_API_TOKEN is required}
+      CONTROL_PLANE_FOUNDER_ID: ${CONTROL_PLANE_FOUNDER_ID:-founder}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    expose:
+      - "8080"
+    networks:
+      - backend
+      - edge
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    environment:
+      CONTROL_PLANE_DOMAIN: ${CONTROL_PLANE_DOMAIN:?CONTROL_PLANE_DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - edge
+
+networks:
+  backend:
+    internal: true
+  edge:
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:
