@@ -58,7 +58,7 @@ export class BuilderProposalService {
     const revalidation = recordField(dispatch.revalidation, "revalidation");
     const claimId = requiredString(claim.id, "claim.id");
     const revalidationId = requiredString(revalidation.id, "revalidation.id");
-    const claimToken = requiredString(dispatch.claimToken, "claimToken");
+    const claimToken = requiredString(claim.claim_token, "claim.claim_token");
     const proposalClaim = await this.proposalStore.claimBuilderProposalRun({
       builderProposalRunId: input.builderProposalRunId,
       builderDispatchClaimId: claimId,
