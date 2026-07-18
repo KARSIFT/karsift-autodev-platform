@@ -101,3 +101,6 @@ jobs:
 
       - name: Verify provider capacity and dispatch readiness
         run: npm run verify:provider
+
+      - name: Verify controlled builder runtime
+        run: npm run verify:builder-runtime
