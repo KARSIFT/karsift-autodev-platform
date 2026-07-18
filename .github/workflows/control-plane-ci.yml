@@ -98,3 +98,6 @@ jobs:
 
       - name: Verify execution evidence and Task Context Packs
         run: npm run verify:context-pack
+
+      - name: Verify provider capacity and dispatch readiness
+        run: npm run verify:provider
