@@ -33,11 +33,24 @@ function limitsFromPlan(plan: RuntimePlan): BuilderExecutionLimits {
 }
 
 export class BuilderRuntimeService {
+  private readonly store: BuilderRuntimeStore;
+  private readonly dispatchStore: BuilderDispatchStore;
+  private readonly adapters: BuilderAdapterRegistry;
+
   public constructor(
-    private readonly store: BuilderRuntimeStore,
-    private readonly dispatchStore: BuilderDispatchStore,
-    private readonly adapters: BuilderAdapterRegistry,
-  ) {}
+    store: BuilderRuntimeStore,
+    dispatchStoreOrAdapters: BuilderDispatchStore | BuilderAdapterRegistry,
+    adapters?: BuilderAdapterRegistry,
+  ) {
+    this.store = store;
+    if (adapters) {
+      this.dispatchStore = dispatchStoreOrAdapters as BuilderDispatchStore;
+      this.adapters = adapters;
+    } else {
+      this.dispatchStore = store as BuilderRuntimeStore & BuilderDispatchStore;
+      this.adapters = dispatchStoreOrAdapters as BuilderAdapterRegistry;
+    }
+  }
 
   public async runBuilderInvocation(input: {
     readonly builderInvocationId: string;
