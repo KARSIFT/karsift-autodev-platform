@@ -15,7 +15,11 @@ const config = loadConfig();
 const pool = createPool(config.databaseUrl);
 const store = new ExtendedPostgresControlPlaneStore(pool);
 const builderAdapters = new BuilderAdapterRegistry([new DryRunBuilderAdapter()]);
-const builderRuntimeService = new BuilderRuntimeService(store, builderAdapters);
+const builderRuntimeService = new BuilderRuntimeService(
+  store,
+  store,
+  builderAdapters,
+);
 const server = createControlPlaneServer(config, store);
 attachContractAuthorizationRoute(server, config, store);
 attachAiBudgetRoute(server, config, store);
