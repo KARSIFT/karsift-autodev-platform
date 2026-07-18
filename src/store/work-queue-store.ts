@@ -214,22 +214,50 @@ export class PostgresWorkQueueStore implements WorkQueueStore {
       }
 
       const candidateResult = await client.query<WorkQueueRow>(
-        `SELECT id, project_id, task_id, status, state_version, idempotency_key
-           FROM work_queue_items
-          WHERE status = 'ELIGIBLE'
-            AND ($1::uuid IS NULL OR project_id = $1::uuid)
-            AND (scheduled_for IS NULL OR scheduled_for <= now())
-          ORDER BY
-            CASE priority
-              WHEN 'P0' THEN 0
-              WHEN 'P1' THEN 1
-              WHEN 'P2' THEN 2
-              ELSE 3
-            END,
-            created_at,
-            id
-          FOR UPDATE SKIP LOCKED
-          LIMIT 1`,
+        `SELECT
+           w.id,
+           w.project_id,
+           w.task_id,
+           w.status,
+           w.state_version,
+           w.idempotency_key
+         FROM work_queue_items w
+         JOIN projects p ON p.id = w.project_id
+         JOIN tasks t ON t.id = w.task_id AND t.project_id = w.project_id
+         JOIN change_contract_versions cv
+           ON cv.id = t.change_contract_version_id
+          AND cv.project_id = w.project_id
+         JOIN change_contracts c
+           ON c.id = cv.contract_id
+          AND c.project_id = w.project_id
+         WHERE w.status = 'ELIGIBLE'
+           AND ($1::uuid IS NULL OR w.project_id = $1::uuid)
+           AND (w.scheduled_for IS NULL OR w.scheduled_for <= now())
+           AND p.status = 'ACTIVE'
+           AND t.status IN ('QUEUED', 'BLOCKED', 'READY')
+           AND c.status = 'AUTHORIZED'
+           AND cv.version = c.current_version
+           AND EXISTS (
+             SELECT 1
+               FROM work_validation_runs validation
+              WHERE validation.work_queue_item_id = w.id
+                AND validation.project_id = w.project_id
+                AND validation.queue_state_version = w.state_version
+                AND validation.change_contract_version_id = cv.id
+                AND validation.contract_content_hash = cv.content_hash
+                AND validation.outcome = 'VALID'
+           )
+         ORDER BY
+           CASE w.priority
+             WHEN 'P0' THEN 0
+             WHEN 'P1' THEN 1
+             WHEN 'P2' THEN 2
+             ELSE 3
+           END,
+           w.created_at,
+           w.id
+         FOR UPDATE OF w SKIP LOCKED
+         LIMIT 1`,
         [input.projectId],
       );
 
