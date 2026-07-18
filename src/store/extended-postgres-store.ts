@@ -7,6 +7,7 @@ import type {
   SettleAiBudgetReservationInput,
   UpsertAiBudgetPolicyInput,
 } from "./ai-budget-types.js";
+import { PostgresBudgetAwareLeaseStore } from "./budget-aware-lease-store.js";
 import { PostgresContractAuthorizationStore } from "./contract-authorization-store.js";
 import type {
   ContractAuthorizationStore,
@@ -38,6 +39,7 @@ export class ExtendedPostgresControlPlaneStore
     AiBudgetStore
 {
   private readonly workQueue: PostgresWorkQueueStore;
+  private readonly budgetAwareLease: PostgresBudgetAwareLeaseStore;
   private readonly freshnessValidation: PostgresFreshnessValidationStore;
   private readonly contractAuthorization: PostgresContractAuthorizationStore;
   private readonly aiBudget: PostgresAiBudgetStore;
@@ -45,6 +47,7 @@ export class ExtendedPostgresControlPlaneStore
   public constructor(pool: Pool) {
     super(pool);
     this.workQueue = new PostgresWorkQueueStore(pool);
+    this.budgetAwareLease = new PostgresBudgetAwareLeaseStore(pool);
     this.freshnessValidation = new PostgresFreshnessValidationStore(pool);
     this.contractAuthorization = new PostgresContractAuthorizationStore(pool);
     this.aiBudget = new PostgresAiBudgetStore(pool);
@@ -59,7 +62,7 @@ export class ExtendedPostgresControlPlaneStore
   }
 
   public claimExecutionLease(input: ClaimExecutionLeaseInput) {
-    return this.workQueue.claimExecutionLease(input);
+    return this.budgetAwareLease.claimExecutionLease(input);
   }
 
   public heartbeatExecutionLease(input: HeartbeatExecutionLeaseInput) {
