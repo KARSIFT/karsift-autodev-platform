@@ -15,9 +15,9 @@ concurrency:
 
 jobs:
   validate:
-    name: Exact toolchain and PostgreSQL validation
+    name: Exact toolchain, deployment, and PostgreSQL validation
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -59,6 +59,21 @@ jobs:
 
       - name: Run deterministic TypeScript and unit checks
         run: npm run check
+
+      - name: Validate development Compose configuration
+        env:
+          CONTROL_PLANE_DOMAIN: control.example.test
+          POSTGRES_DB: autodev
+          POSTGRES_USER: autodev
+          POSTGRES_PASSWORD: ci-only-password
+          DATABASE_URL: postgresql://autodev:ci-only-password@postgres:5432/autodev
+          CONTROL_PLANE_API_TOKEN: ci-internal-token-not-for-production-0001
+          CONTROL_PLANE_FOUNDER_API_TOKEN: ci-founder-token-not-for-production-0002
+          CONTROL_PLANE_FOUNDER_INTERFACE_API_TOKEN: ci-interface-token-not-for-production-0003
+        run: docker compose -f deploy/development/compose.yaml config >/dev/null
+
+      - name: Build development Control Plane image
+        run: docker build --target runtime -t karsift-autodev-control-plane:ci .
 
       - name: Apply PostgreSQL migration
         run: npm run migrate
