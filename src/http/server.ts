@@ -8,8 +8,10 @@ import type { AppConfig } from "../config.js";
 import { assertCapability } from "../domain/capabilities.js";
 import type { WorkflowStatus } from "../domain/workflow-state.js";
 import { authenticateBearerToken } from "../security/auth.js";
+import { isFounderInterfaceRouteAllowed } from "../security/authorization.js";
 import type { ControlPlaneStore } from "../store/types.js";
 import { ValidationError } from "./errors.js";
+import { createFounderOpenApiDocument } from "./founder-openapi.js";
 import {
   asObject,
   optionalObject,
@@ -121,6 +123,11 @@ export function createControlPlaneServer(
         return;
       }
 
+      if (method === "GET" && url.pathname === "/openapi.json") {
+        sendJson(response, 200, createFounderOpenApiDocument(config.publicBaseUrl));
+        return;
+      }
+
       if (!url.pathname.startsWith("/v1/")) {
         sendJson(response, 404, { error: "not_found" });
         return;
@@ -130,11 +137,20 @@ export function createControlPlaneServer(
         internalApiToken: config.internalApiToken,
         internalServiceId: config.internalServiceId,
         founderApiToken: config.founderApiToken,
+        founderInterfaceApiToken: config.founderInterfaceApiToken,
         founderId: config.founderId,
       });
 
       if (!actor) {
         sendJson(response, 401, { error: "unauthorized" });
+        return;
+      }
+
+      if (!isFounderInterfaceRouteAllowed(actor, method, url.pathname)) {
+        sendJson(response, 403, {
+          error: "forbidden",
+          message: "Founder interface credential is not authorized for this operation",
+        });
         return;
       }
 
