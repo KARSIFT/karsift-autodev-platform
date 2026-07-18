@@ -38,6 +38,8 @@ try {
     "ai_provider_dispatch_decisions",
     "ai_provider_routing_policies",
     "audit_events",
+    "builder_dispatch_claims",
+    "builder_dispatch_revalidations",
     "builder_invocation_plans",
     "builder_invocation_results",
     "builder_invocations",
@@ -85,6 +87,7 @@ try {
       "0006_task_context_packs.sql",
       "0007_provider_dispatch_readiness.sql",
       "0008_controlled_builder_runtime.sql",
+      "0009_atomic_builder_dispatch.sql",
     ],
     "all foundation migrations must be recorded exactly once",
   );
