@@ -119,3 +119,6 @@ jobs:
 
       - name: Verify immutable workspace read context snapshots
         run: npm run verify:workspace-read-context
+
+      - name: Verify structured builder proposal lifecycle
+        run: npm run verify:builder-proposal
