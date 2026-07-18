@@ -20,6 +20,7 @@
     "verify:context-pack": "node scripts/verify-task-context-pack.mjs",
     "verify:provider": "node scripts/verify-provider-dispatch.mjs",
     "verify:builder-runtime": "node scripts/verify-builder-runtime.mjs",
+    "verify:builder-dispatch": "node scripts/verify-builder-dispatch.mjs",
     "check": "npm run build && npm test"
   },
   "dependencies": {
