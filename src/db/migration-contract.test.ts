@@ -20,3 +20,24 @@ test("foundation migration encodes append-only and project-isolation constraints
   assert.doesNotMatch(sql, /^\s*BEGIN;/m);
   assert.doesNotMatch(sql, /^\s*COMMIT;/m);
 });
+
+test("work queue migration and store encode duplicate-safe lease constraints", async () => {
+  const migration = await readFile(
+    path.resolve(process.cwd(), "migrations/0002_work_queue_execution_leases.sql"),
+    "utf8",
+  );
+  const store = await readFile(
+    path.resolve(process.cwd(), "src/store/work-queue-store.ts"),
+    "utf8",
+  );
+
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS work_queue_items/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS execution_attempts/);
+  assert.match(migration, /execution_attempt_one_active_idx/);
+  assert.match(migration, /UNIQUE\(project_id, idempotency_key\)/);
+  assert.match(migration, /FOREIGN KEY\(work_queue_item_id, project_id\)/);
+  assert.match(store, /FOR UPDATE SKIP LOCKED/);
+  assert.match(store, /lease_expires_at <= now\(\)/);
+  assert.doesNotMatch(migration, /^\s*BEGIN;/m);
+  assert.doesNotMatch(migration, /^\s*COMMIT;/m);
+});

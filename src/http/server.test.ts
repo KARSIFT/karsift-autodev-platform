@@ -16,10 +16,21 @@ import type {
   DisableCapabilityInput,
   TransitionWorkflowRunInput,
 } from "../store/types.js";
+import type {
+  ClaimExecutionLeaseInput,
+  CompleteExecutionLeaseInput,
+  CreateWorkQueueItemInput,
+  HeartbeatExecutionLeaseInput,
+  ReleaseExecutionLeaseInput,
+  SetWorkQueueEligibilityInput,
+  WorkQueueStore,
+} from "../store/work-queue-types.js";
 import { createControlPlaneServer } from "./server.js";
 
-class FakeStore implements ControlPlaneStore {
+class FakeStore implements ControlPlaneStore, WorkQueueStore {
   public lastDecision: CreateDecisionInput | null = null;
+  public lastWorkQueueItem: CreateWorkQueueItemInput | null = null;
+  public lastLeaseClaim: ClaimExecutionLeaseInput | null = null;
 
   public async ping(): Promise<void> {}
 
@@ -70,6 +81,54 @@ class FakeStore implements ControlPlaneStore {
   public async transitionWorkflowRun(
     _input: TransitionWorkflowRunInput,
   ): Promise<Record<string, unknown>> {
+    return {};
+  }
+
+  public async createWorkQueueItem(
+    input: CreateWorkQueueItemInput,
+  ): Promise<Record<string, unknown>> {
+    this.lastWorkQueueItem = input;
+    return { id: "work-item-1", status: "QUEUED" };
+  }
+
+  public async setWorkQueueEligibility(
+    _input: SetWorkQueueEligibilityInput,
+  ): Promise<Record<string, unknown>> {
+    return {};
+  }
+
+  public async claimExecutionLease(
+    input: ClaimExecutionLeaseInput,
+  ): Promise<Record<string, unknown> | null> {
+    this.lastLeaseClaim = input;
+    return { executionAttempt: { id: "attempt-1" } };
+  }
+
+  public async heartbeatExecutionLease(
+    _input: HeartbeatExecutionLeaseInput,
+  ): Promise<Record<string, unknown>> {
+    return {};
+  }
+
+  public async completeExecutionLease(
+    _input: CompleteExecutionLeaseInput,
+  ): Promise<Record<string, unknown>> {
+    return {};
+  }
+
+  public async releaseExecutionLease(
+    _input: ReleaseExecutionLeaseInput,
+  ): Promise<Record<string, unknown>> {
+    return {};
+  }
+
+  public async getProjectQueueStatus(
+    _projectId: string,
+  ): Promise<Record<string, unknown>> {
+    return {};
+  }
+
+  public async getPlatformQueueStatus(): Promise<Record<string, unknown>> {
     return {};
   }
 
@@ -279,6 +338,10 @@ test("founder interface token is blocked from execution and governance routes", 
         { workflowType: "BUILD" },
       ],
       [
+        "/v1/projects/project-1/work-queue",
+        { taskId: "task-1", idempotencyKey: "project-1:task-1" },
+      ],
+      [
         "/v1/workflow-runs/run-1/transition",
         { expectedStateVersion: 0, targetStatus: "RUNNING" },
       ],
@@ -298,5 +361,42 @@ test("founder interface token is blocked from execution and governance routes", 
     }
 
     assert.equal(store.lastDecision, null);
+  });
+});
+
+test("internal service can queue work and claim a lease without AI dispatch", async () => {
+  await withServer(async (baseUrl, store) => {
+    const headers = {
+      authorization: `Bearer ${config.internalApiToken}`,
+      "content-type": "application/json",
+    };
+
+    const queueResponse = await fetch(
+      `${baseUrl}/v1/projects/project-1/work-queue`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          taskId: "task-1",
+          priority: "P1",
+          executionPolicy: "IMMEDIATE",
+          idempotencyKey: "project-1:task-1",
+        }),
+      },
+    );
+    assert.equal(queueResponse.status, 201);
+    assert.equal(store.lastWorkQueueItem?.executionPolicy, "IMMEDIATE");
+
+    const claimResponse = await fetch(`${baseUrl}/v1/execution-leases/claim`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        projectId: "project-1",
+        leaseOwner: "ci-worker",
+        leaseSeconds: 300,
+      }),
+    });
+    assert.equal(claimResponse.status, 200);
+    assert.equal(store.lastLeaseClaim?.leaseOwner, "ci-worker");
   });
 });

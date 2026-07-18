@@ -6,10 +6,16 @@ import {
 
 import type { AppConfig } from "../config.js";
 import { assertCapability } from "../domain/capabilities.js";
+import {
+  isExecutionPolicy,
+  isWaitingReason,
+  targetEligibilityState,
+} from "../domain/work-queue.js";
 import type { WorkflowStatus } from "../domain/workflow-state.js";
 import { authenticateBearerToken } from "../security/auth.js";
 import { isFounderInterfaceRouteAllowed } from "../security/authorization.js";
 import type { ControlPlaneStore } from "../store/types.js";
+import type { WorkQueueStore } from "../store/work-queue-types.js";
 import { ValidationError } from "./errors.js";
 import { createFounderOpenApiDocument } from "./founder-openapi.js";
 import {
@@ -106,7 +112,7 @@ function isWorkflowStatus(value: string): value is WorkflowStatus {
 
 export function createControlPlaneServer(
   config: AppConfig,
-  store: ControlPlaneStore,
+  store: ControlPlaneStore & WorkQueueStore,
 ) {
   return createServer(async (request, response) => {
     const method = request.method ?? "GET";
@@ -335,6 +341,157 @@ export function createControlPlaneServer(
         return;
       }
 
+      const projectWorkQueue = matchPath(
+        url.pathname,
+        "/v1/projects/:projectId/work-queue",
+      );
+      if (method === "POST" && projectWorkQueue) {
+        const body = asObject(await readJsonBody(request));
+        const priority = optionalString(body, "priority") ?? "P2";
+        if (!["P0", "P1", "P2", "P3"].includes(priority)) {
+          throw new ValidationError("priority must be P0, P1, P2, or P3");
+        }
+        const executionPolicy =
+          optionalString(body, "executionPolicy") ??
+          "WHEN_AI_CAPACITY_AVAILABLE";
+        if (!isExecutionPolicy(executionPolicy)) {
+          throw new ValidationError("executionPolicy is not valid");
+        }
+        const scheduledFor = optionalString(body, "scheduledFor");
+        if (executionPolicy === "SCHEDULED" && scheduledFor === null) {
+          throw new ValidationError(
+            "scheduledFor is required for SCHEDULED execution policy",
+          );
+        }
+
+        const result = await store.createWorkQueueItem({
+          projectId: projectWorkQueue.params.projectId ?? "",
+          taskId: requiredString(body, "taskId"),
+          priority: priority as "P0" | "P1" | "P2" | "P3",
+          executionPolicy,
+          scheduledFor,
+          idempotencyKey: requiredString(body, "idempotencyKey", { max: 300 }),
+          actor,
+        });
+        sendJson(response, 201, result);
+        return;
+      }
+
+      const workQueueEligibility = matchPath(
+        url.pathname,
+        "/v1/work-queue/:workQueueItemId/eligibility",
+      );
+      if (method === "POST" && workQueueEligibility) {
+        const body = asObject(await readJsonBody(request));
+        const eligible = body.eligible;
+        if (typeof eligible !== "boolean") {
+          throw new ValidationError("eligible must be a boolean");
+        }
+        const waitingReason = optionalString(body, "waitingReason") ?? "NONE";
+        if (!isWaitingReason(waitingReason)) {
+          throw new ValidationError("waitingReason is not valid");
+        }
+        try {
+          targetEligibilityState(eligible, waitingReason);
+        } catch (error) {
+          throw new ValidationError(
+            error instanceof Error ? error.message : "Invalid eligibility state",
+          );
+        }
+
+        const result = await store.setWorkQueueEligibility({
+          workQueueItemId: workQueueEligibility.params.workQueueItemId ?? "",
+          expectedStateVersion: requiredInteger(body, "expectedStateVersion"),
+          eligible,
+          waitingReason,
+          actor,
+        });
+        sendJson(response, 200, result);
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/v1/execution-leases/claim") {
+        const body = asObject(await readJsonBody(request));
+        const leaseSeconds = requiredInteger(body, "leaseSeconds");
+        if (leaseSeconds < 30 || leaseSeconds > 3600) {
+          throw new ValidationError("leaseSeconds must be between 30 and 3600");
+        }
+        const result = await store.claimExecutionLease({
+          projectId: optionalString(body, "projectId"),
+          leaseOwner: requiredString(body, "leaseOwner", { max: 300 }),
+          leaseSeconds,
+          actor,
+        });
+        if (result === null) {
+          response.statusCode = 204;
+          response.end();
+          return;
+        }
+        sendJson(response, 200, result);
+        return;
+      }
+
+      const leaseHeartbeat = matchPath(
+        url.pathname,
+        "/v1/execution-leases/:executionAttemptId/heartbeat",
+      );
+      if (method === "POST" && leaseHeartbeat) {
+        const body = asObject(await readJsonBody(request));
+        const leaseSeconds = requiredInteger(body, "leaseSeconds");
+        if (leaseSeconds < 30 || leaseSeconds > 3600) {
+          throw new ValidationError("leaseSeconds must be between 30 and 3600");
+        }
+        const result = await store.heartbeatExecutionLease({
+          executionAttemptId: leaseHeartbeat.params.executionAttemptId ?? "",
+          leaseToken: requiredString(body, "leaseToken"),
+          leaseSeconds,
+          actor,
+        });
+        sendJson(response, 200, result);
+        return;
+      }
+
+      const leaseComplete = matchPath(
+        url.pathname,
+        "/v1/execution-leases/:executionAttemptId/complete",
+      );
+      if (method === "POST" && leaseComplete) {
+        const body = asObject(await readJsonBody(request));
+        const outcome = requiredString(body, "outcome");
+        if (outcome !== "SUCCEEDED" && outcome !== "FAILED") {
+          throw new ValidationError("outcome must be SUCCEEDED or FAILED");
+        }
+        const result = await store.completeExecutionLease({
+          executionAttemptId: leaseComplete.params.executionAttemptId ?? "",
+          leaseToken: requiredString(body, "leaseToken"),
+          outcome,
+          details: optionalObject(body, "details"),
+          actor,
+        });
+        sendJson(response, 200, result);
+        return;
+      }
+
+      const leaseRelease = matchPath(
+        url.pathname,
+        "/v1/execution-leases/:executionAttemptId/release",
+      );
+      if (method === "POST" && leaseRelease) {
+        const body = asObject(await readJsonBody(request));
+        const waitingReason = optionalString(body, "waitingReason") ?? "NONE";
+        if (!isWaitingReason(waitingReason)) {
+          throw new ValidationError("waitingReason is not valid");
+        }
+        const result = await store.releaseExecutionLease({
+          executionAttemptId: leaseRelease.params.executionAttemptId ?? "",
+          leaseToken: requiredString(body, "leaseToken"),
+          waitingReason,
+          actor,
+        });
+        sendJson(response, 200, result);
+        return;
+      }
+
       const disableCapability = matchPath(
         url.pathname,
         "/v1/capabilities/:capability/disable",
@@ -364,8 +521,9 @@ export function createControlPlaneServer(
       }
 
       if (
-        message.includes("version conflict") ||
-        message.includes("Invalid workflow transition")
+        message.toLowerCase().includes("conflict") ||
+        message.includes("Invalid workflow transition") ||
+        message.includes("duplicate key value violates unique constraint")
       ) {
         sendJson(response, 409, { error: "conflict", message });
         return;
