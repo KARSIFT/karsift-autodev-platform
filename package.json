@@ -22,6 +22,7 @@
     "verify:builder-runtime": "node scripts/verify-builder-runtime.mjs",
     "verify:builder-dispatch": "node scripts/verify-builder-dispatch.mjs",
     "verify:repository-workspace": "node scripts/verify-repository-workspace.mjs",
+    "verify:workspace-command": "node scripts/verify-workspace-command.mjs",
     "check": "npm run build && npm test"
   },
   "dependencies": {
