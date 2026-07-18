@@ -33,6 +33,7 @@ export interface FreshnessFacts {
   readonly contractStatus: "DRAFT" | "AUTHORIZED" | "SUPERSEDED" | "CANCELLED";
   readonly contractVersion: number;
   readonly currentContractVersion: number;
+  readonly effectiveAuthorization: boolean;
 }
 
 export interface FreshnessDecision {
@@ -79,21 +80,21 @@ export function evaluateFreshness(facts: FreshnessFacts): FreshnessDecision {
     };
   }
 
-  if (facts.contractStatus !== "AUTHORIZED") {
-    return {
-      outcome: "BLOCKED",
-      reasonCode: "CONTRACT_NOT_AUTHORIZED",
-      targetStatus: "BLOCKED",
-      waitingReason: "FOUNDER_DECISION",
-    };
-  }
-
   if (facts.contractVersion !== facts.currentContractVersion) {
     return {
       outcome: "STALE",
       reasonCode: "CONTRACT_VERSION_STALE",
       targetStatus: "BLOCKED",
       waitingReason: "POLICY",
+    };
+  }
+
+  if (!facts.effectiveAuthorization) {
+    return {
+      outcome: "BLOCKED",
+      reasonCode: "CONTRACT_NOT_AUTHORIZED",
+      targetStatus: "BLOCKED",
+      waitingReason: "FOUNDER_DECISION",
     };
   }
 
