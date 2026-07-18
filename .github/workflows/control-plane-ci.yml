@@ -92,3 +92,6 @@ jobs:
 
       - name: Verify governed Change Contract authorization
         run: npm run verify:authorization
+
+      - name: Verify AI Budget Governor and cost reservations
+        run: npm run verify:budget
