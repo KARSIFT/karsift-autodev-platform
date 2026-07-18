@@ -3,7 +3,6 @@ import type { Pool, PoolClient, QueryResultRow } from "pg";
 import {
   evaluateAiBudget,
   type AiBudgetPolicyFacts,
-  type ExecutionClass,
 } from "../domain/ai-budget.js";
 import type { JsonValue } from "../domain/stable-json.js";
 import type {
