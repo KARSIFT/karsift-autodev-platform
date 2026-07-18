@@ -11,6 +11,36 @@ export interface PrepareBuilderInvocationInput {
   readonly actor: Actor;
 }
 
+export interface StartBuilderInvocationInput {
+  readonly builderInvocationId: string;
+  readonly actor: Actor;
+}
+
+export interface CompleteBuilderInvocationInput {
+  readonly builderInvocationId: string;
+  readonly result: BuilderAdapterResult;
+  readonly actor: Actor;
+}
+
+export interface BuilderRuntimeStore {
+  prepareBuilderInvocation(
+    input: PrepareBuilderInvocationInput,
+  ): Promise<Record<string, unknown>>;
+  startBuilderInvocation(
+    input: StartBuilderInvocationInput,
+  ): Promise<Record<string, unknown>>;
+  completeBuilderInvocation(
+    input: CompleteBuilderInvocationInput,
+  ): Promise<Record<string, unknown>>;
+  getBuilderInvocation(
+    builderInvocationId: string,
+  ): Promise<Record<string, unknown> | null>;
+  getProjectBuilderRuntimeStatus(
+    projectId: string,
+  ): Promise<Record<string, unknown>>;
+  getPlatformBuilderRuntimeStatus(): Promise<Record<string, unknown>>;
+}
+
 export interface AcquireBuilderDispatchClaimInput {
   readonly builderInvocationId: string;
   readonly claimOwner: string;
@@ -37,23 +67,7 @@ export interface CompleteBuilderDispatchClaimInput {
   readonly actor: Actor;
 }
 
-export interface StartBuilderInvocationInput {
-  readonly builderInvocationId: string;
-  readonly builderDispatchClaimId: string;
-  readonly claimToken: string;
-  readonly actor: Actor;
-}
-
-export interface CompleteBuilderInvocationInput {
-  readonly builderInvocationId: string;
-  readonly result: BuilderAdapterResult;
-  readonly actor: Actor;
-}
-
-export interface BuilderRuntimeStore {
-  prepareBuilderInvocation(
-    input: PrepareBuilderInvocationInput,
-  ): Promise<Record<string, unknown>>;
+export interface BuilderDispatchStore {
   acquireBuilderDispatchClaim(
     input: AcquireBuilderDispatchClaimInput,
   ): Promise<Record<string, unknown>>;
@@ -66,17 +80,8 @@ export interface BuilderRuntimeStore {
   completeBuilderDispatchClaim(
     input: CompleteBuilderDispatchClaimInput,
   ): Promise<Record<string, unknown>>;
-  startBuilderInvocation(
-    input: StartBuilderInvocationInput,
-  ): Promise<Record<string, unknown>>;
-  completeBuilderInvocation(
-    input: CompleteBuilderInvocationInput,
-  ): Promise<Record<string, unknown>>;
-  getBuilderInvocation(
-    builderInvocationId: string,
-  ): Promise<Record<string, unknown> | null>;
-  getProjectBuilderRuntimeStatus(
+  getProjectBuilderDispatchStatus(
     projectId: string,
   ): Promise<Record<string, unknown>>;
-  getPlatformBuilderRuntimeStatus(): Promise<Record<string, unknown>>;
+  getPlatformBuilderDispatchStatus(): Promise<Record<string, unknown>>;
 }
