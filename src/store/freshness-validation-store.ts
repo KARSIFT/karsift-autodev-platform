@@ -118,14 +118,14 @@ export class PostgresFreshnessValidationStore
            ON c.id = v.contract_id
           AND c.project_id = w.project_id
          LEFT JOIN LATERAL (
-           SELECT authorization.decision
-             FROM change_contract_authorization_decisions authorization
-            WHERE authorization.project_id = w.project_id
-              AND authorization.change_contract_id = c.id
-              AND authorization.change_contract_version_id = v.id
-              AND authorization.contract_content_hash = v.content_hash
-              AND authorization.decision IN ('AUTHORIZED', 'REVOKED')
-            ORDER BY authorization.created_at DESC, authorization.id DESC
+           SELECT auth_decision.decision
+             FROM change_contract_authorization_decisions auth_decision
+            WHERE auth_decision.project_id = w.project_id
+              AND auth_decision.change_contract_id = c.id
+              AND auth_decision.change_contract_version_id = v.id
+              AND auth_decision.contract_content_hash = v.content_hash
+              AND auth_decision.decision IN ('AUTHORIZED', 'REVOKED')
+            ORDER BY auth_decision.created_at DESC, auth_decision.id DESC
             LIMIT 1
          ) auth ON true
          WHERE w.id = $1
