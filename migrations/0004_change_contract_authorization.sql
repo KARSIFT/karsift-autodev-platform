@@ -52,12 +52,12 @@ LANGUAGE sql
 STABLE
 AS $$
     SELECT COALESCE((
-        SELECT authorization.decision = 'AUTHORIZED'
-          FROM change_contract_authorization_decisions authorization
-         WHERE authorization.change_contract_version_id = p_change_contract_version_id
-           AND authorization.contract_content_hash = p_contract_content_hash
-           AND authorization.decision IN ('AUTHORIZED', 'REVOKED')
-         ORDER BY authorization.created_at DESC, authorization.id DESC
+        SELECT auth_decision.decision = 'AUTHORIZED'
+          FROM change_contract_authorization_decisions auth_decision
+         WHERE auth_decision.change_contract_version_id = p_change_contract_version_id
+           AND auth_decision.contract_content_hash = p_contract_content_hash
+           AND auth_decision.decision IN ('AUTHORIZED', 'REVOKED')
+         ORDER BY auth_decision.created_at DESC, auth_decision.id DESC
          LIMIT 1
     ), false);
 $$;
