@@ -58,7 +58,16 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Run deterministic TypeScript and unit checks
-        run: npm run check
+        id: deterministic_checks
+        run: npm run check 2>&1 | tee deterministic-check.log
+
+      - name: Upload deterministic check diagnostics
+        if: failure() && steps.deterministic_checks.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-check-diagnostics
+          path: deterministic-check.log
+          retention-days: 1
 
       - name: Validate development Compose configuration
         env:
