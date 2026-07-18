@@ -23,6 +23,7 @@
     "verify:builder-dispatch": "node scripts/verify-builder-dispatch.mjs",
     "verify:repository-workspace": "node scripts/verify-repository-workspace.mjs",
     "verify:workspace-command": "node scripts/verify-workspace-command.mjs",
+    "verify:workspace-mutation": "node scripts/verify-workspace-mutation.mjs",
     "check": "npm run build && npm test"
   },
   "dependencies": {
