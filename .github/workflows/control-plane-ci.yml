@@ -108,5 +108,5 @@ jobs:
       - name: Verify atomic builder dispatch and provider revalidation
         run: npm run verify:builder-dispatch
 
-      - name: Verify isolated repository workspaces and scope enforcement
+      - name: Verify isolated repository workspaces and bounded command execution
         run: npm run verify:repository-workspace
