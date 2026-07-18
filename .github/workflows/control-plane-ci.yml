@@ -95,3 +95,6 @@ jobs:
 
       - name: Verify AI Budget Governor and cost reservations
         run: npm run verify:budget
+
+      - name: Verify execution evidence and Task Context Packs
+        run: npm run verify:context-pack
