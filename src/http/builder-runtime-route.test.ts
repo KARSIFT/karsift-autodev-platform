@@ -245,8 +245,6 @@ test("internal dry-run execution acquires one dispatch claim before adapter exec
       externalProviderCalled: false,
       repositoryMutated: false,
       invocationId: "invocation-1",
-      dispatchClaimId: "claim-1",
-      dispatchIdempotencyKey: `builder-dispatch:${"a".repeat(64)}`,
       planHash: "a".repeat(64),
       taskContextPackHash: "b".repeat(64),
       providerKey: "dry-run-builder",
