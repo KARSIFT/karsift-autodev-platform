@@ -1,0 +1,11 @@
+change_id: ADP-011
+name: Controlled Builder Runtime Contract
+issue: 22
+base_branch: develop
+risk_level: R3
+status: implementation_candidate
+activation_level_before: A1
+activation_level_after: A1
+enabled_capabilities: []
+merge_target: develop
+requires_exact_head_ci: true
