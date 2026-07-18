@@ -25,6 +25,18 @@ async function expectRejected(operation, message) {
   assert.equal(rejected, true, message);
 }
 
+async function approveDeterministicBudget(workQueueItemId) {
+  const result = await store.authorizeWorkBudget({
+    workQueueItemId,
+    executionClass: "DETERMINISTIC",
+    estimatedMaxCostMicrousd: 0,
+    actor,
+  });
+  assert.equal(result.decision.decision, "APPROVED");
+  assert.equal(result.decision.reason_code, "NO_AI_REQUIRED");
+  assert.equal(result.reservation, null);
+}
+
 try {
   const project = await store.createProject(
     {
@@ -95,13 +107,23 @@ try {
   assert.equal(initialValidation.validation.outcome, "VALID");
   assert.equal(initialValidation.workItem.status, "ELIGIBLE");
 
+  const noBudgetClaim = await store.claimExecutionLease({
+    projectId,
+    leaseOwner: "worker-before-budget",
+    leaseSeconds: 300,
+    actor,
+  });
+  assert.equal(noBudgetClaim, null, "work without an exact-state budget decision must not be leased");
+
+  await approveDeterministicBudget(workQueueItemId);
+
   const firstClaim = await store.claimExecutionLease({
     projectId,
     leaseOwner: "worker-one",
     leaseSeconds: 300,
     actor,
   });
-  assert.notEqual(firstClaim, null, "first eligible item must be claimable");
+  assert.notEqual(firstClaim, null, "budget-approved eligible item must be claimable");
   const firstAttempt = firstClaim.executionAttempt;
   assert.equal(firstAttempt.status, "ACTIVE");
   assert.equal(firstAttempt.attempt_number, 1);
@@ -128,7 +150,7 @@ try {
          ) VALUES ($1, $2, 99, $3, 'duplicate-worker', now() + interval '5 minutes')`,
         [workQueueItemId, projectId, idempotencyKey],
       ),
-    "database must reject a second active execution attempt for one work item",
+    "database must reject an unauthorized duplicate active execution attempt",
   );
 
   await expectRejected(
@@ -164,6 +186,7 @@ try {
     actor,
   });
   assert.equal(releaseValidation.validation.outcome, "VALID");
+  await approveDeterministicBudget(workQueueItemId);
 
   const secondClaim = await store.claimExecutionLease({
     projectId,
@@ -190,7 +213,7 @@ try {
   assert.equal(
     recoverySweep,
     null,
-    "expired recovery must invalidate old validation before reclaim",
+    "expired recovery must invalidate prior freshness and budget evidence",
   );
 
   const recoveryValidation = await store.validateWorkQueueItem({
@@ -198,6 +221,7 @@ try {
     actor,
   });
   assert.equal(recoveryValidation.validation.outcome, "VALID");
+  await approveDeterministicBudget(workQueueItemId);
 
   const recoveredClaim = await store.claimExecutionLease({
     projectId,
@@ -205,7 +229,7 @@ try {
     leaseSeconds: 300,
     actor,
   });
-  assert.notEqual(recoveredClaim, null, "revalidated expired work must be reclaimable");
+  assert.notEqual(recoveredClaim, null, "revalidated and rebudgeted work must be reclaimable");
   const thirdAttempt = recoveredClaim.executionAttempt;
   assert.equal(thirdAttempt.attempt_number, 3);
   assert.equal(thirdAttempt.idempotency_key, idempotencyKey);
