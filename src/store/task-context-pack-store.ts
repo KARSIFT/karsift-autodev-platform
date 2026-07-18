@@ -44,6 +44,7 @@ interface PackContextRow extends QueryResultRow {
   readonly work_validation_run_id: string;
   readonly change_contract_authorization_decision_id: string;
   readonly ai_budget_decision_id: string;
+  readonly provider_dispatch_decision_id: string | null;
 
   readonly project_slug: string;
   readonly project_name: string;
@@ -97,6 +98,23 @@ interface PackContextRow extends QueryResultRow {
   readonly reservation_status: string | null;
   readonly reservation_reserved_microusd: string | null;
   readonly reservation_actual_cost_microusd: string | null;
+
+  readonly provider_routing_policy_version: number | null;
+  readonly provider_candidate_keys: string[] | null;
+  readonly provider_key: string | null;
+  readonly provider_selected_rank: number | null;
+  readonly provider_capability: string | null;
+  readonly provider_outcome: string | null;
+  readonly provider_waiting_reason: string | null;
+  readonly provider_reason_code: string | null;
+  readonly provider_dispatch_created_at: string | null;
+
+  readonly provider_capacity_observation_id: string | null;
+  readonly provider_capacity_status: string | null;
+  readonly provider_quota_reset_at: string | null;
+  readonly provider_capacity_details: JsonValue | null;
+  readonly provider_observed_at: string | null;
+  readonly provider_expires_at: string | null;
 }
 
 async function appendAudit(
@@ -220,6 +238,7 @@ export class PostgresTaskContextPackStore implements TaskContextPackStore {
            attempt.work_validation_run_id,
            attempt.change_contract_authorization_decision_id,
            attempt.ai_budget_decision_id,
+           attempt.provider_dispatch_decision_id,
 
            project.slug AS project_slug,
            project.name AS project_name,
@@ -272,7 +291,24 @@ export class PostgresTaskContextPackStore implements TaskContextPackStore {
            reservation.id AS reservation_id,
            reservation.status AS reservation_status,
            reservation.reserved_microusd::text AS reservation_reserved_microusd,
-           reservation.actual_cost_microusd::text AS reservation_actual_cost_microusd
+           reservation.actual_cost_microusd::text AS reservation_actual_cost_microusd,
+
+           dispatch_decision.routing_policy_version AS provider_routing_policy_version,
+           dispatch_decision.candidate_provider_keys AS provider_candidate_keys,
+           dispatch_decision.provider_key,
+           dispatch_decision.selected_provider_rank AS provider_selected_rank,
+           dispatch_decision.capability AS provider_capability,
+           dispatch_decision.outcome AS provider_outcome,
+           dispatch_decision.waiting_reason AS provider_waiting_reason,
+           dispatch_decision.reason_code AS provider_reason_code,
+           dispatch_decision.created_at::text AS provider_dispatch_created_at,
+
+           capacity_observation.id AS provider_capacity_observation_id,
+           capacity_observation.status AS provider_capacity_status,
+           capacity_observation.quota_reset_at::text AS provider_quota_reset_at,
+           capacity_observation.details AS provider_capacity_details,
+           capacity_observation.observed_at::text AS provider_observed_at,
+           capacity_observation.expires_at::text AS provider_expires_at
          FROM execution_attempts attempt
          JOIN projects project
            ON project.id = attempt.project_id
@@ -300,6 +336,12 @@ export class PostgresTaskContextPackStore implements TaskContextPackStore {
          LEFT JOIN ai_budget_reservations reservation
            ON reservation.budget_decision_id = budget_decision.id
           AND reservation.project_id = attempt.project_id
+         LEFT JOIN ai_provider_dispatch_decisions dispatch_decision
+           ON dispatch_decision.id = attempt.provider_dispatch_decision_id
+          AND dispatch_decision.project_id = attempt.project_id
+         LEFT JOIN ai_provider_capacity_observations capacity_observation
+           ON capacity_observation.id = dispatch_decision.capacity_observation_id
+          AND capacity_observation.project_id = attempt.project_id
          WHERE attempt.id = $1`,
         [input.executionAttemptId],
       );
@@ -310,6 +352,33 @@ export class PostgresTaskContextPackStore implements TaskContextPackStore {
           "Task Context Pack conflict: execution evidence is incomplete",
         );
       }
+
+      const providerDispatchEvidence: JsonValue =
+        context.provider_dispatch_decision_id === null
+          ? null
+          : {
+              id: context.provider_dispatch_decision_id,
+              routingPolicyVersion: context.provider_routing_policy_version,
+              candidateProviderKeys: context.provider_candidate_keys ?? [],
+              providerKey: context.provider_key,
+              selectedProviderRank: context.provider_selected_rank,
+              capability: context.provider_capability,
+              outcome: context.provider_outcome,
+              waitingReason: context.provider_waiting_reason,
+              reasonCode: context.provider_reason_code,
+              capacityObservation:
+                context.provider_capacity_observation_id === null
+                  ? null
+                  : {
+                      id: context.provider_capacity_observation_id,
+                      status: context.provider_capacity_status,
+                      quotaResetAt: context.provider_quota_reset_at,
+                      details: context.provider_capacity_details,
+                      observedAt: context.provider_observed_at,
+                      expiresAt: context.provider_expires_at,
+                    },
+              createdAt: context.provider_dispatch_created_at,
+            };
 
       const content: JsonValue = {
         schemaVersion: TASK_CONTEXT_PACK_SCHEMA_VERSION,
@@ -416,6 +485,7 @@ export class PostgresTaskContextPackStore implements TaskContextPackStore {
                   },
             createdAt: context.budget_created_at,
           },
+          providerDispatch: providerDispatchEvidence,
         },
         execution: {
           attemptId: context.execution_attempt_id,
@@ -437,6 +507,7 @@ export class PostgresTaskContextPackStore implements TaskContextPackStore {
            work_validation_run_id,
            change_contract_authorization_decision_id,
            ai_budget_decision_id,
+           provider_dispatch_decision_id,
            change_contract_id,
            change_contract_version_id,
            change_contract_version,
@@ -448,7 +519,7 @@ export class PostgresTaskContextPackStore implements TaskContextPackStore {
            content_hash,
            created_by
          ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18
+           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19
          )
          RETURNING *`,
         [
@@ -460,6 +531,7 @@ export class PostgresTaskContextPackStore implements TaskContextPackStore {
           context.work_validation_run_id,
           context.change_contract_authorization_decision_id,
           context.ai_budget_decision_id,
+          context.provider_dispatch_decision_id,
           context.change_contract_id,
           context.change_contract_version_id,
           context.change_contract_version,
@@ -489,6 +561,7 @@ export class PostgresTaskContextPackStore implements TaskContextPackStore {
           changeContractAuthorizationDecisionId:
             context.change_contract_authorization_decision_id,
           aiBudgetDecisionId: context.ai_budget_decision_id,
+          providerDispatchDecisionId: context.provider_dispatch_decision_id,
           changeContractVersionId: context.change_contract_version_id,
           contractContentHash: context.contract_content_hash,
           baseBranch: input.baseBranch,
@@ -529,6 +602,7 @@ export class PostgresTaskContextPackStore implements TaskContextPackStore {
                 work_queue_item_id,
                 task_id,
                 change_contract_version_id,
+                provider_dispatch_decision_id,
                 base_branch,
                 base_commit_sha,
                 content_hash,
