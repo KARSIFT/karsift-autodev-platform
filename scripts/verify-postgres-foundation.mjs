@@ -39,6 +39,9 @@ try {
     "builder_invocation_plans",
     "builder_invocation_results",
     "builder_invocations",
+    "builder_proposal_evidence",
+    "builder_proposal_requests",
+    "builder_proposal_runs",
     "capability_switches",
     "change_contract_authorization_decisions",
     "change_contract_versions",
@@ -100,6 +103,7 @@ try {
       "0011_workspace_commands.sql",
       "0012_workspace_mutations.sql",
       "0013_workspace_read_context.sql",
+      "0014_builder_proposals.sql",
     ],
     "all foundation migrations must be recorded exactly once",
   );
