@@ -9,6 +9,9 @@ RUN npm run build
 FROM node:24.18.0-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apk add --no-cache git \
+    && mkdir -p /var/lib/karsift/repositories /var/lib/karsift/workspaces \
+    && chown -R node:node /var/lib/karsift
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 COPY --from=build /app/dist ./dist
