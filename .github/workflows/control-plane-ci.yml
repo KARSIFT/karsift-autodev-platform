@@ -89,3 +89,6 @@ jobs:
 
       - name: Verify freshness and continuing authority
         run: npm run verify:freshness
+
+      - name: Verify governed Change Contract authorization
+        run: npm run verify:authorization
