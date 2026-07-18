@@ -63,6 +63,9 @@ try {
     "workspace_mutation_evidence",
     "workspace_mutation_plans",
     "workspace_mutation_runs",
+    "workspace_read_context_requests",
+    "workspace_read_context_runs",
+    "workspace_read_context_snapshots",
   ].sort();
 
   const tables = await client.query(
@@ -96,6 +99,7 @@ try {
       "0010_repository_workspaces.sql",
       "0011_workspace_commands.sql",
       "0012_workspace_mutations.sql",
+      "0013_workspace_read_context.sql",
     ],
     "all foundation migrations must be recorded exactly once",
   );
