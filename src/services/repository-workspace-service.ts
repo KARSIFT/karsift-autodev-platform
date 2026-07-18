@@ -9,6 +9,7 @@ interface WorkspacePlanView {
   readonly adapter_key: string;
   readonly workspace_key: string;
   readonly branch_name: string;
+  readonly base_branch: string;
   readonly base_commit_sha: string;
   readonly mode: "READ_ONLY" | "WRITE";
 }
@@ -64,6 +65,7 @@ export class RepositoryWorkspaceService {
       const materialized = await adapter.materialize({
         sourceRepositoryPath: input.sourceRepositoryPath,
         workspacePath,
+        baseBranch: current.plan.base_branch,
         baseCommitSha: current.plan.base_commit_sha,
         branchName: current.plan.branch_name,
         mode: current.plan.mode,
