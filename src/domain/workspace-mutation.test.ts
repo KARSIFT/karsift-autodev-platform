@@ -132,7 +132,9 @@ test("workspace mutation plan hashes bind exact operations and authority", () =>
       ...input,
       operations: [
         {
-          ...input.operations[0],
+          type: "UPDATE",
+          path: "src/index.ts",
+          expectedBeforeHash: beforeHash,
           content: "export const value = 3;\n",
         },
       ],
