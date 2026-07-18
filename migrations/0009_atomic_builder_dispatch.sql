@@ -221,3 +221,33 @@ DROP TRIGGER IF EXISTS builder_dispatch_revalidation_evidence_gate
 CREATE TRIGGER builder_dispatch_revalidation_evidence_gate
 BEFORE INSERT ON builder_dispatch_revalidations
 FOR EACH ROW EXECUTE FUNCTION enforce_builder_dispatch_revalidation_evidence();
+
+CREATE OR REPLACE FUNCTION require_active_builder_dispatch_claim_before_start()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF OLD.status = 'PREPARED' AND NEW.status = 'RUNNING' AND NOT EXISTS (
+        SELECT 1
+          FROM builder_dispatch_claims claim
+          JOIN builder_dispatch_revalidations revalidation
+            ON revalidation.builder_dispatch_claim_id = claim.id
+           AND revalidation.project_id = claim.project_id
+         WHERE claim.builder_invocation_id = NEW.id
+           AND claim.project_id = NEW.project_id
+           AND claim.status = 'ACTIVE'
+           AND claim.lease_expires_at > now()
+           AND revalidation.outcome = 'READY'
+           AND revalidation.waiting_reason = 'NONE'
+    ) THEN
+        RAISE EXCEPTION 'Builder invocation conflict: active READY dispatch claim is required before start';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS builder_invocation_dispatch_claim_gate ON builder_invocations;
+CREATE TRIGGER builder_invocation_dispatch_claim_gate
+BEFORE UPDATE OF status ON builder_invocations
+FOR EACH ROW EXECUTE FUNCTION require_active_builder_dispatch_claim_before_start();
