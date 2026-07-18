@@ -31,6 +31,9 @@ const client = await pool.connect();
 
 try {
   const expectedTables = [
+    "ai_budget_decisions",
+    "ai_budget_policies",
+    "ai_budget_reservations",
     "audit_events",
     "capability_switches",
     "change_contract_authorization_decisions",
@@ -71,6 +74,7 @@ try {
       "0002_work_queue_execution_leases.sql",
       "0003_work_freshness_validation.sql",
       "0004_change_contract_authorization.sql",
+      "0005_ai_budget_governor.sql",
     ],
     "all foundation migrations must be recorded exactly once",
   );
