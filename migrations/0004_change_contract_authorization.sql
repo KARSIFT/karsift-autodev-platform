@@ -42,3 +42,64 @@ DROP TRIGGER IF EXISTS change_contract_authorization_decisions_immutable
 CREATE TRIGGER change_contract_authorization_decisions_immutable
 BEFORE UPDATE OR DELETE ON change_contract_authorization_decisions
 FOR EACH ROW EXECUTE FUNCTION prevent_immutable_table_mutation();
+
+CREATE OR REPLACE FUNCTION has_effective_change_contract_authorization(
+    p_change_contract_version_id uuid,
+    p_contract_content_hash text
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT COALESCE((
+        SELECT authorization.decision = 'AUTHORIZED'
+          FROM change_contract_authorization_decisions authorization
+         WHERE authorization.change_contract_version_id = p_change_contract_version_id
+           AND authorization.contract_content_hash = p_contract_content_hash
+           AND authorization.decision IN ('AUTHORIZED', 'REVOKED')
+         ORDER BY authorization.created_at DESC, authorization.id DESC
+         LIMIT 1
+    ), false);
+$$;
+
+CREATE OR REPLACE FUNCTION enforce_execution_attempt_authorization()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    authorized boolean;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1
+          FROM work_queue_items work
+          JOIN tasks task
+            ON task.id = work.task_id
+           AND task.project_id = work.project_id
+          JOIN change_contract_versions version
+            ON version.id = task.change_contract_version_id
+           AND version.project_id = work.project_id
+          JOIN change_contracts contract
+            ON contract.id = version.contract_id
+           AND contract.project_id = work.project_id
+         WHERE work.id = NEW.work_queue_item_id
+           AND work.project_id = NEW.project_id
+           AND contract.status NOT IN ('SUPERSEDED', 'CANCELLED')
+           AND version.version = contract.current_version
+           AND has_effective_change_contract_authorization(
+                 version.id,
+                 version.content_hash
+               )
+    ) INTO authorized;
+
+    IF NOT authorized THEN
+        RAISE EXCEPTION 'Execution authority conflict: current Change Contract version is not effectively authorized';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS execution_attempt_authorization_gate ON execution_attempts;
+CREATE TRIGGER execution_attempt_authorization_gate
+BEFORE INSERT ON execution_attempts
+FOR EACH ROW EXECUTE FUNCTION enforce_execution_attempt_authorization();
