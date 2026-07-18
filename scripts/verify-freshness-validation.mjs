@@ -33,6 +33,16 @@ async function expectRejected(operation, message) {
   assert.equal(rejected, true, message);
 }
 
+async function approveDeterministicBudget(workQueueItemId) {
+  const result = await store.authorizeWorkBudget({
+    workQueueItemId,
+    executionClass: "DETERMINISTIC",
+    estimatedMaxCostMicrousd: 0,
+    actor,
+  });
+  assert.equal(result.decision.decision, "APPROVED");
+}
+
 try {
   const project = await store.createProject(
     {
@@ -107,6 +117,7 @@ try {
   });
   assert.equal(authorized.validation.outcome, "VALID");
   assert.equal(authorized.workItem.status, "ELIGIBLE");
+  await approveDeterministicBudget(workOneId);
 
   const firstClaim = await store.claimExecutionLease({
     projectId,
@@ -133,7 +144,7 @@ try {
   assert.equal(
     staleValidationClaim,
     null,
-    "queue state changes must invalidate prior validation evidence",
+    "queue state changes must invalidate prior freshness and budget evidence",
   );
 
   const retryValidation = await store.validateWorkQueueItem({
@@ -141,6 +152,7 @@ try {
     actor,
   });
   assert.equal(retryValidation.validation.outcome, "VALID");
+  await approveDeterministicBudget(workOneId);
 
   const secondClaim = await store.claimExecutionLease({
     projectId,
@@ -213,6 +225,7 @@ try {
     actor,
   });
   assert.equal(currentValidation.validation.outcome, "VALID");
+  await approveDeterministicBudget(workTwoId);
 
   const revocation = await store.recordChangeContractAuthorization({
     changeContractId: contractId,
@@ -232,7 +245,7 @@ try {
   assert.equal(
     revokedAfterValidation,
     null,
-    "claim must re-check continuing authority after validation",
+    "claim must re-check continuing authority even with current budget approval",
   );
 
   const revokedValidation = await store.validateWorkQueueItem({
