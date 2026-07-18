@@ -11,8 +11,36 @@ export interface PrepareBuilderInvocationInput {
   readonly actor: Actor;
 }
 
+export interface AcquireBuilderDispatchClaimInput {
+  readonly builderInvocationId: string;
+  readonly claimOwner: string;
+  readonly leaseSeconds: number;
+  readonly actor: Actor;
+}
+
+export interface HeartbeatBuilderDispatchClaimInput {
+  readonly builderDispatchClaimId: string;
+  readonly claimToken: string;
+  readonly leaseSeconds: number;
+  readonly actor: Actor;
+}
+
+export interface ReleaseBuilderDispatchClaimInput {
+  readonly builderDispatchClaimId: string;
+  readonly claimToken: string;
+  readonly actor: Actor;
+}
+
+export interface CompleteBuilderDispatchClaimInput {
+  readonly builderDispatchClaimId: string;
+  readonly claimToken: string;
+  readonly actor: Actor;
+}
+
 export interface StartBuilderInvocationInput {
   readonly builderInvocationId: string;
+  readonly builderDispatchClaimId: string;
+  readonly claimToken: string;
   readonly actor: Actor;
 }
 
@@ -25,6 +53,18 @@ export interface CompleteBuilderInvocationInput {
 export interface BuilderRuntimeStore {
   prepareBuilderInvocation(
     input: PrepareBuilderInvocationInput,
+  ): Promise<Record<string, unknown>>;
+  acquireBuilderDispatchClaim(
+    input: AcquireBuilderDispatchClaimInput,
+  ): Promise<Record<string, unknown>>;
+  heartbeatBuilderDispatchClaim(
+    input: HeartbeatBuilderDispatchClaimInput,
+  ): Promise<Record<string, unknown>>;
+  releaseBuilderDispatchClaim(
+    input: ReleaseBuilderDispatchClaimInput,
+  ): Promise<Record<string, unknown>>;
+  completeBuilderDispatchClaim(
+    input: CompleteBuilderDispatchClaimInput,
   ): Promise<Record<string, unknown>>;
   startBuilderInvocation(
     input: StartBuilderInvocationInput,
