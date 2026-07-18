@@ -2,13 +2,17 @@ import type { Pool, PoolClient, QueryResultRow } from "pg";
 
 import {
   assertProviderKey,
-  evaluateProviderDispatchReadiness,
+  evaluateProviderRoute,
+  normalizeProviderKeys,
+  type ProviderCapacityStatus,
+  type ProviderRouteCandidate,
 } from "../domain/provider-capacity.js";
 import type { JsonValue } from "../domain/stable-json.js";
 import type {
   EvaluateProviderDispatchInput,
   ProviderDispatchStore,
   RecordProviderCapacityObservationInput,
+  UpsertProviderRoutingPolicyInput,
 } from "./provider-dispatch-types.js";
 import type { Actor } from "./types.js";
 
@@ -21,10 +25,18 @@ interface DispatchWorkRow extends QueryResultRow {
   readonly execution_class: string;
 }
 
-interface CapacityObservationRow extends QueryResultRow {
-  readonly id: string;
-  readonly status: "HEALTHY" | "DEGRADED" | "QUOTA_EXHAUSTED" | "UNAVAILABLE";
-  readonly fresh: boolean;
+interface RoutingPolicyRow extends QueryResultRow {
+  readonly provider_keys: string[];
+  readonly enabled: boolean;
+  readonly version: number;
+}
+
+interface CandidateObservationRow extends QueryResultRow {
+  readonly provider_key: string;
+  readonly provider_rank: number;
+  readonly id: string | null;
+  readonly status: ProviderCapacityStatus | null;
+  readonly fresh: boolean | null;
 }
 
 function assertTtlSeconds(ttlSeconds: number): void {
@@ -78,6 +90,58 @@ export class PostgresProviderDispatchStore implements ProviderDispatchStore {
     } finally {
       client.release();
     }
+  }
+
+  public async upsertProviderRoutingPolicy(
+    input: UpsertProviderRoutingPolicyInput,
+  ): Promise<Record<string, unknown>> {
+    const providerKeys = normalizeProviderKeys(input.providerKeys);
+
+    return this.transaction(async (client) => {
+      const result = await client.query(
+        `INSERT INTO ai_provider_routing_policies(
+           project_id,
+           execution_class,
+           capability,
+           provider_keys,
+           enabled,
+           updated_by
+         ) VALUES ($1, $2, $3, $4::text[], $5, $6)
+         ON CONFLICT (project_id, execution_class, capability) DO UPDATE
+             SET provider_keys = EXCLUDED.provider_keys,
+                 enabled = EXCLUDED.enabled,
+                 version = ai_provider_routing_policies.version + 1,
+                 updated_by = EXCLUDED.updated_by,
+                 updated_at = now()
+         RETURNING *`,
+        [
+          input.projectId,
+          input.executionClass,
+          input.capability,
+          providerKeys,
+          input.enabled,
+          input.actor.id,
+        ],
+      );
+      const policy = result.rows[0] as Record<string, unknown>;
+
+      await appendAudit(client, {
+        projectId: input.projectId,
+        actor: input.actor,
+        action: "AI_PROVIDER_ROUTING_POLICY_UPSERTED",
+        entityType: "AI_PROVIDER_ROUTING_POLICY",
+        entityId: `${input.projectId}:${input.executionClass}:${input.capability}`,
+        data: {
+          executionClass: input.executionClass,
+          capability: input.capability,
+          providerKeys: [...providerKeys],
+          enabled: input.enabled,
+          version: Number(policy.version),
+        },
+      });
+
+      return policy;
+    });
   }
 
   public async recordProviderCapacityObservation(
@@ -137,7 +201,6 @@ export class PostgresProviderDispatchStore implements ProviderDispatchStore {
   public async evaluateProviderDispatch(
     input: EvaluateProviderDispatchInput,
   ): Promise<Record<string, unknown>> {
-    assertProviderKey(input.providerKey);
     if (input.capability !== "CODE_BUILDER") {
       throw new Error(
         "Provider dispatch conflict: execution work requires CODE_BUILDER capability",
@@ -187,25 +250,63 @@ export class PostgresProviderDispatchStore implements ProviderDispatchStore {
         );
       }
 
-      const observationResult = await client.query<CapacityObservationRow>(
-        `SELECT
-           observation.id,
-           observation.status,
-           observation.expires_at > now() AS fresh
-         FROM ai_provider_capacity_observations observation
-         WHERE observation.project_id = $1
-           AND observation.provider_key = $2
-           AND observation.capability = $3
-         ORDER BY observation.observed_at DESC, observation.id DESC
-         LIMIT 1`,
-        [work.project_id, input.providerKey, input.capability],
+      const policyResult = await client.query<RoutingPolicyRow>(
+        `SELECT provider_keys, enabled, version
+           FROM ai_provider_routing_policies
+          WHERE project_id = $1
+            AND execution_class = $2
+            AND capability = $3
+          FOR SHARE`,
+        [work.project_id, work.execution_class, input.capability],
       );
-      const observation = observationResult.rows[0] ?? null;
-      const decision = evaluateProviderDispatchReadiness(
-        observation
-          ? { status: observation.status, fresh: observation.fresh }
-          : null,
-      );
+      const policy = policyResult.rows[0] ?? null;
+      const providerKeys = policy?.enabled ? normalizeProviderKeys(policy.provider_keys) : [];
+
+      let observationRows: CandidateObservationRow[] = [];
+      if (providerKeys.length > 0) {
+        const observationResult = await client.query<CandidateObservationRow>(
+          `SELECT
+             candidate.provider_key,
+             candidate.provider_rank::integer AS provider_rank,
+             observation.id,
+             observation.status,
+             observation.expires_at > now() AS fresh
+           FROM unnest($1::text[]) WITH ORDINALITY
+                AS candidate(provider_key, provider_rank)
+           LEFT JOIN LATERAL (
+             SELECT capacity.id,
+                    capacity.status,
+                    capacity.expires_at
+               FROM ai_provider_capacity_observations capacity
+              WHERE capacity.project_id = $2
+                AND capacity.provider_key = candidate.provider_key
+                AND capacity.capability = $3
+              ORDER BY capacity.observed_at DESC, capacity.id DESC
+              LIMIT 1
+           ) observation ON true
+           ORDER BY candidate.provider_rank`,
+          [providerKeys, work.project_id, input.capability],
+        );
+        observationRows = observationResult.rows;
+      }
+
+      const routeCandidates: ProviderRouteCandidate[] = observationRows.map((row) => ({
+        providerKey: row.provider_key,
+        rank: row.provider_rank,
+        capacity:
+          row.id === null || row.status === null
+            ? null
+            : { status: row.status, fresh: row.fresh === true },
+      }));
+      const decision = evaluateProviderRoute(routeCandidates);
+      const selectedObservation =
+        decision.providerRank === null
+          ? null
+          : observationRows.find(
+              (row) =>
+                row.provider_rank === decision.providerRank &&
+                row.provider_key === decision.providerKey,
+            ) ?? null;
 
       const result = await client.query(
         `INSERT INTO ai_provider_dispatch_decisions(
@@ -213,23 +314,31 @@ export class PostgresProviderDispatchStore implements ProviderDispatchStore {
            work_queue_item_id,
            queue_state_version,
            ai_budget_decision_id,
+           routing_policy_version,
+           candidate_provider_keys,
            provider_key,
+           selected_provider_rank,
            capability,
            capacity_observation_id,
            outcome,
            waiting_reason,
            reason_code,
            created_by
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6::text[], $7, $8, $9, $10, $11, $12, $13, $14
+         )
          RETURNING *`,
         [
           work.project_id,
           work.id,
           work.state_version,
           work.ai_budget_decision_id,
-          input.providerKey,
+          policy?.version ?? 0,
+          providerKeys,
+          decision.providerKey,
+          decision.providerRank,
           input.capability,
-          observation?.id ?? null,
+          selectedObservation?.id ?? null,
           decision.outcome,
           decision.waitingReason,
           decision.reason,
@@ -248,9 +357,12 @@ export class PostgresProviderDispatchStore implements ProviderDispatchStore {
           workQueueItemId: work.id,
           queueStateVersion: work.state_version,
           aiBudgetDecisionId: work.ai_budget_decision_id,
-          providerKey: input.providerKey,
+          routingPolicyVersion: policy?.version ?? 0,
+          candidateProviderKeys: [...providerKeys],
+          providerKey: decision.providerKey,
+          providerRank: decision.providerRank,
           capability: input.capability,
-          capacityObservationId: observation?.id ?? null,
+          capacityObservationId: selectedObservation?.id ?? null,
           outcome: decision.outcome,
           waitingReason: decision.waitingReason,
           reason: decision.reason,
@@ -264,7 +376,14 @@ export class PostgresProviderDispatchStore implements ProviderDispatchStore {
   public async getProjectProviderDispatchStatus(
     projectId: string,
   ): Promise<Record<string, unknown>> {
-    const [observations, decisions] = await Promise.all([
+    const [policies, observations, decisions] = await Promise.all([
+      this.pool.query(
+        `SELECT *
+           FROM ai_provider_routing_policies
+          WHERE project_id = $1
+          ORDER BY execution_class, capability`,
+        [projectId],
+      ),
       this.pool.query(
         `SELECT *
            FROM ai_provider_capacity_observations
@@ -284,6 +403,7 @@ export class PostgresProviderDispatchStore implements ProviderDispatchStore {
     ]);
 
     return {
+      providerRoutingPolicies: policies.rows,
       recentProviderCapacityObservations: observations.rows,
       recentProviderDispatchDecisions: decisions.rows,
     };
@@ -292,7 +412,12 @@ export class PostgresProviderDispatchStore implements ProviderDispatchStore {
   public async getPlatformProviderDispatchStatus(): Promise<
     Record<string, unknown>
   > {
-    const [capacityCounts, dispatchCounts] = await Promise.all([
+    const [policyCount, capacityCounts, dispatchCounts] = await Promise.all([
+      this.pool.query(
+        `SELECT count(*)::text AS provider_routing_policy_count
+           FROM ai_provider_routing_policies
+          WHERE enabled = true`,
+      ),
       this.pool.query(
         `SELECT status, count(*)::text AS count
            FROM ai_provider_capacity_observations
@@ -309,6 +434,8 @@ export class PostgresProviderDispatchStore implements ProviderDispatchStore {
     ]);
 
     return {
+      providerRoutingPolicyCount:
+        policyCount.rows[0]?.provider_routing_policy_count ?? "0",
       providerCapacityCounts: capacityCounts.rows,
       providerDispatchDecisionCounts: dispatchCounts.rows,
     };
