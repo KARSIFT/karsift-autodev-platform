@@ -1,0 +1,37 @@
+id: ADP-009
+slug: task-context-packs
+status: implemented
+risk: R3
+owner: karsift-control-plane
+issue: 18
+objective: >-
+  Bind each new execution attempt to the exact evidence that granted its lease and
+  produce at most one immutable, reproducibly hashed Task Context Pack per attempt.
+activation_level_before: A1
+activation_level_after: A1
+capabilities_enabled: []
+capabilities_remaining_disabled:
+  - AUTOMATED_WRITE
+  - AI_DISPATCH
+  - AUTO_MERGE
+  - DEPLOYMENT
+  - PRODUCTION_RELEASE
+  - INCIDENT_REPAIR
+in_scope:
+  - execution-attempt evidence snapshots
+  - database evidence-binding enforcement
+  - immutable one-per-attempt Task Context Packs
+  - canonical pack content and SHA-256 hashing
+  - repository base branch and commit snapshot input
+  - normalized relevant repository paths
+  - lease-token proof for pack creation
+  - internal-only pack create/read routes
+  - project and platform pack observability
+out_of_scope:
+  - GitHub base-SHA resolution
+  - Codex or implementation-agent invocation
+  - AI provider calls
+  - AI_DISPATCH activation
+  - Claude verification
+  - automatic merge
+  - deployment or production release
