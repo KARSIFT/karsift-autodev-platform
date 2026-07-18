@@ -104,3 +104,6 @@ jobs:
 
       - name: Verify controlled builder runtime
         run: npm run verify:builder-runtime
+
+      - name: Verify atomic builder dispatch and provider revalidation
+        run: npm run verify:builder-dispatch

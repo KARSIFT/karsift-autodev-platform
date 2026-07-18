@@ -3,12 +3,20 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import type { AppConfig } from "../config.js";
 import { authenticateBearerToken } from "../security/auth.js";
 import type { BuilderRuntimeService } from "../services/builder-runtime-service.js";
-import type { BuilderRuntimeStore } from "../store/builder-runtime-types.js";
+import type {
+  BuilderDispatchStore,
+  BuilderRuntimeStore,
+} from "../store/builder-runtime-types.js";
 
 const MAX_BODY_BYTES = 1_000_000;
 const PREPARE_PATH = /^\/v1\/execution-attempts\/([^/]+)\/builder-invocations$/;
 const RUN_PATH = /^\/v1\/builder-invocations\/([^/]+)\/run-dry-run$/;
 const READ_PATH = /^\/v1\/builder-invocations\/([^/]+)$/;
+const CLAIM_HEARTBEAT_PATH =
+  /^\/v1\/builder-dispatch-claims\/([^/]+)\/heartbeat$/;
+const CLAIM_RELEASE_PATH = /^\/v1\/builder-dispatch-claims\/([^/]+)\/release$/;
+
+type BuilderRuntimeApiStore = BuilderRuntimeStore & BuilderDispatchStore;
 
 type RequestHandler = (
   request: IncomingMessage,
@@ -68,7 +76,7 @@ function requiredSafeInteger(
 export function attachBuilderRuntimeRoute(
   server: Server,
   config: AppConfig,
-  store: BuilderRuntimeStore,
+  store: BuilderRuntimeApiStore,
   service: BuilderRuntimeService,
 ): void {
   const existingListeners = server.listeners("request") as unknown as RequestHandler[];
@@ -84,8 +92,18 @@ export function attachBuilderRuntimeRoute(
     const prepareMatch = method === "POST" ? PREPARE_PATH.exec(url.pathname) : null;
     const runMatch = method === "POST" ? RUN_PATH.exec(url.pathname) : null;
     const readMatch = method === "GET" ? READ_PATH.exec(url.pathname) : null;
+    const heartbeatMatch =
+      method === "POST" ? CLAIM_HEARTBEAT_PATH.exec(url.pathname) : null;
+    const releaseMatch =
+      method === "POST" ? CLAIM_RELEASE_PATH.exec(url.pathname) : null;
 
-    if (!prepareMatch && !runMatch && !readMatch) {
+    if (
+      !prepareMatch &&
+      !runMatch &&
+      !readMatch &&
+      !heartbeatMatch &&
+      !releaseMatch
+    ) {
       for (const listener of existingListeners) {
         listener(request, response);
       }
@@ -137,6 +155,29 @@ export function attachBuilderRuntimeRoute(
             actor,
           });
           sendJson(response, 200, result);
+          return;
+        }
+
+        if (heartbeatMatch) {
+          const body = await readJsonBody(request);
+          const claim = await store.heartbeatBuilderDispatchClaim({
+            builderDispatchClaimId: decodeURIComponent(heartbeatMatch[1] ?? ""),
+            claimToken: requiredString(body, "claimToken"),
+            leaseSeconds: requiredSafeInteger(body, "leaseSeconds", 1),
+            actor,
+          });
+          sendJson(response, 200, claim);
+          return;
+        }
+
+        if (releaseMatch) {
+          const body = await readJsonBody(request);
+          const claim = await store.releaseBuilderDispatchClaim({
+            builderDispatchClaimId: decodeURIComponent(releaseMatch[1] ?? ""),
+            claimToken: requiredString(body, "claimToken"),
+            actor,
+          });
+          sendJson(response, 200, claim);
           return;
         }
 

@@ -40,3 +40,48 @@ export interface BuilderRuntimeStore {
   ): Promise<Record<string, unknown>>;
   getPlatformBuilderRuntimeStatus(): Promise<Record<string, unknown>>;
 }
+
+export interface AcquireBuilderDispatchClaimInput {
+  readonly builderInvocationId: string;
+  readonly claimOwner: string;
+  readonly leaseSeconds: number;
+  readonly actor: Actor;
+}
+
+export interface HeartbeatBuilderDispatchClaimInput {
+  readonly builderDispatchClaimId: string;
+  readonly claimToken: string;
+  readonly leaseSeconds: number;
+  readonly actor: Actor;
+}
+
+export interface ReleaseBuilderDispatchClaimInput {
+  readonly builderDispatchClaimId: string;
+  readonly claimToken: string;
+  readonly actor: Actor;
+}
+
+export interface CompleteBuilderDispatchClaimInput {
+  readonly builderDispatchClaimId: string;
+  readonly claimToken: string;
+  readonly actor: Actor;
+}
+
+export interface BuilderDispatchStore {
+  acquireBuilderDispatchClaim(
+    input: AcquireBuilderDispatchClaimInput,
+  ): Promise<Record<string, unknown>>;
+  heartbeatBuilderDispatchClaim(
+    input: HeartbeatBuilderDispatchClaimInput,
+  ): Promise<Record<string, unknown>>;
+  releaseBuilderDispatchClaim(
+    input: ReleaseBuilderDispatchClaimInput,
+  ): Promise<Record<string, unknown>>;
+  completeBuilderDispatchClaim(
+    input: CompleteBuilderDispatchClaimInput,
+  ): Promise<Record<string, unknown>>;
+  getProjectBuilderDispatchStatus(
+    projectId: string,
+  ): Promise<Record<string, unknown>>;
+  getPlatformBuilderDispatchStatus(): Promise<Record<string, unknown>>;
+}

@@ -36,6 +36,8 @@ export interface BuilderInvocationPlanContent {
 
 export interface BuilderAdapterInput {
   readonly invocationId: string;
+  readonly dispatchClaimId: string;
+  readonly dispatchIdempotencyKey: string;
   readonly planHash: string;
   readonly taskContextPackHash: string;
   readonly providerKey: string;
