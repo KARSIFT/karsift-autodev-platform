@@ -2,6 +2,7 @@ import { loadConfig } from "./config.js";
 import { createPool } from "./db/pool.js";
 import { attachAiBudgetRoute } from "./http/ai-budget-route.js";
 import { attachContractAuthorizationRoute } from "./http/contract-authorization-route.js";
+import { attachProviderDispatchRoute } from "./http/provider-dispatch-route.js";
 import { createControlPlaneServer } from "./http/server.js";
 import { attachTaskContextPackRoute } from "./http/task-context-pack-route.js";
 import { ExtendedPostgresControlPlaneStore } from "./store/extended-postgres-store.js";
@@ -12,6 +13,7 @@ const store = new ExtendedPostgresControlPlaneStore(pool);
 const server = createControlPlaneServer(config, store);
 attachContractAuthorizationRoute(server, config, store);
 attachAiBudgetRoute(server, config, store);
+attachProviderDispatchRoute(server, config, store);
 attachTaskContextPackRoute(server, config, store);
 
 async function shutdown(signal: string): Promise<void> {
