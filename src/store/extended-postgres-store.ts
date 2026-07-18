@@ -19,6 +19,13 @@ import type {
   FreshnessValidationStore,
   ValidateWorkQueueItemInput,
 } from "./freshness-validation-types.js";
+import { PostgresProviderDispatchStore } from "./provider-dispatch-store.js";
+import type {
+  EvaluateProviderDispatchInput,
+  ProviderDispatchStore,
+  RecordProviderCapacityObservationInput,
+  UpsertProviderRoutingPolicyInput,
+} from "./provider-dispatch-types.js";
 import { PostgresTaskContextPackStore } from "./task-context-pack-store.js";
 import type {
   CreateTaskContextPackInput,
@@ -42,6 +49,7 @@ export class ExtendedPostgresControlPlaneStore
     FreshnessValidationStore,
     ContractAuthorizationStore,
     AiBudgetStore,
+    ProviderDispatchStore,
     TaskContextPackStore
 {
   private readonly workQueue: PostgresWorkQueueStore;
@@ -49,6 +57,7 @@ export class ExtendedPostgresControlPlaneStore
   private readonly freshnessValidation: PostgresFreshnessValidationStore;
   private readonly contractAuthorization: PostgresContractAuthorizationStore;
   private readonly aiBudget: PostgresAiBudgetStore;
+  private readonly providerDispatch: PostgresProviderDispatchStore;
   private readonly taskContextPack: PostgresTaskContextPackStore;
 
   public constructor(pool: Pool) {
@@ -58,6 +67,7 @@ export class ExtendedPostgresControlPlaneStore
     this.freshnessValidation = new PostgresFreshnessValidationStore(pool);
     this.contractAuthorization = new PostgresContractAuthorizationStore(pool);
     this.aiBudget = new PostgresAiBudgetStore(pool);
+    this.providerDispatch = new PostgresProviderDispatchStore(pool);
     this.taskContextPack = new PostgresTaskContextPackStore(pool);
   }
 
@@ -139,6 +149,28 @@ export class ExtendedPostgresControlPlaneStore
     return this.aiBudget.getPlatformAiBudgetStatus();
   }
 
+  public upsertProviderRoutingPolicy(input: UpsertProviderRoutingPolicyInput) {
+    return this.providerDispatch.upsertProviderRoutingPolicy(input);
+  }
+
+  public recordProviderCapacityObservation(
+    input: RecordProviderCapacityObservationInput,
+  ) {
+    return this.providerDispatch.recordProviderCapacityObservation(input);
+  }
+
+  public evaluateProviderDispatch(input: EvaluateProviderDispatchInput) {
+    return this.providerDispatch.evaluateProviderDispatch(input);
+  }
+
+  public getProjectProviderDispatchStatus(projectId: string) {
+    return this.providerDispatch.getProjectProviderDispatchStatus(projectId);
+  }
+
+  public getPlatformProviderDispatchStatus() {
+    return this.providerDispatch.getPlatformProviderDispatchStatus();
+  }
+
   public createTaskContextPack(input: CreateTaskContextPackInput) {
     return this.taskContextPack.createTaskContextPack(input);
   }
@@ -156,41 +188,59 @@ export class ExtendedPostgresControlPlaneStore
   }
 
   public override async getProjectStatus(projectId: string) {
-    const [base, queue, validation, authorization, aiBudget, contextPacks] =
-      await Promise.all([
-        super.getProjectStatus(projectId),
-        this.workQueue.getProjectQueueStatus(projectId),
-        this.freshnessValidation.getProjectValidationStatus(projectId),
-        this.contractAuthorization.getProjectAuthorizationStatus(projectId),
-        this.aiBudget.getProjectAiBudgetStatus(projectId),
-        this.taskContextPack.getProjectTaskContextPackStatus(projectId),
-      ]);
+    const [
+      base,
+      queue,
+      validation,
+      authorization,
+      aiBudget,
+      providerDispatch,
+      contextPacks,
+    ] = await Promise.all([
+      super.getProjectStatus(projectId),
+      this.workQueue.getProjectQueueStatus(projectId),
+      this.freshnessValidation.getProjectValidationStatus(projectId),
+      this.contractAuthorization.getProjectAuthorizationStatus(projectId),
+      this.aiBudget.getProjectAiBudgetStatus(projectId),
+      this.providerDispatch.getProjectProviderDispatchStatus(projectId),
+      this.taskContextPack.getProjectTaskContextPackStatus(projectId),
+    ]);
     return {
       ...base,
       ...queue,
       ...validation,
       ...authorization,
       ...aiBudget,
+      ...providerDispatch,
       ...contextPacks,
     };
   }
 
   public override async getPlatformStatus() {
-    const [base, queue, validation, authorization, aiBudget, contextPacks] =
-      await Promise.all([
-        super.getPlatformStatus(),
-        this.workQueue.getPlatformQueueStatus(),
-        this.freshnessValidation.getPlatformValidationStatus(),
-        this.contractAuthorization.getPlatformAuthorizationStatus(),
-        this.aiBudget.getPlatformAiBudgetStatus(),
-        this.taskContextPack.getPlatformTaskContextPackStatus(),
-      ]);
+    const [
+      base,
+      queue,
+      validation,
+      authorization,
+      aiBudget,
+      providerDispatch,
+      contextPacks,
+    ] = await Promise.all([
+      super.getPlatformStatus(),
+      this.workQueue.getPlatformQueueStatus(),
+      this.freshnessValidation.getPlatformValidationStatus(),
+      this.contractAuthorization.getPlatformAuthorizationStatus(),
+      this.aiBudget.getPlatformAiBudgetStatus(),
+      this.providerDispatch.getPlatformProviderDispatchStatus(),
+      this.taskContextPack.getPlatformTaskContextPackStatus(),
+    ]);
     return {
       ...base,
       ...queue,
       ...validation,
       ...authorization,
       ...aiBudget,
+      ...providerDispatch,
       ...contextPacks,
     };
   }
