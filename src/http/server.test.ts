@@ -4,6 +4,10 @@ import test from "node:test";
 
 import type { AppConfig } from "../config.js";
 import type {
+  FreshnessValidationStore,
+  ValidateWorkQueueItemInput,
+} from "../store/freshness-validation-types.js";
+import type {
   Actor,
   AppendChangeContractVersionInput,
   ControlPlaneStore,
@@ -27,10 +31,11 @@ import type {
 } from "../store/work-queue-types.js";
 import { createControlPlaneServer } from "./server.js";
 
-class FakeStore implements ControlPlaneStore, WorkQueueStore {
+class FakeStore implements ControlPlaneStore, WorkQueueStore, FreshnessValidationStore {
   public lastDecision: CreateDecisionInput | null = null;
   public lastWorkQueueItem: CreateWorkQueueItemInput | null = null;
   public lastLeaseClaim: ClaimExecutionLeaseInput | null = null;
+  public lastValidation: ValidateWorkQueueItemInput | null = null;
 
   public async ping(): Promise<void> {}
 
@@ -129,6 +134,23 @@ class FakeStore implements ControlPlaneStore, WorkQueueStore {
   }
 
   public async getPlatformQueueStatus(): Promise<Record<string, unknown>> {
+    return {};
+  }
+
+  public async validateWorkQueueItem(
+    input: ValidateWorkQueueItemInput,
+  ): Promise<Record<string, unknown>> {
+    this.lastValidation = input;
+    return { validation: { outcome: "VALID" }, workItem: { status: "ELIGIBLE" } };
+  }
+
+  public async getProjectValidationStatus(
+    _projectId: string,
+  ): Promise<Record<string, unknown>> {
+    return {};
+  }
+
+  public async getPlatformValidationStatus(): Promise<Record<string, unknown>> {
     return {};
   }
 
@@ -342,6 +364,10 @@ test("founder interface token is blocked from execution and governance routes", 
         { taskId: "task-1", idempotencyKey: "project-1:task-1" },
       ],
       [
+        "/v1/work-queue/work-item-1/validate",
+        {},
+      ],
+      [
         "/v1/workflow-runs/run-1/transition",
         { expectedStateVersion: 0, targetStatus: "RUNNING" },
       ],
@@ -386,6 +412,13 @@ test("internal service can queue work and claim a lease without AI dispatch", as
     );
     assert.equal(queueResponse.status, 201);
     assert.equal(store.lastWorkQueueItem?.executionPolicy, "IMMEDIATE");
+
+    const validationResponse = await fetch(
+      `${baseUrl}/v1/work-queue/work-item-1/validate`,
+      { method: "POST", headers, body: JSON.stringify({}) },
+    );
+    assert.equal(validationResponse.status, 200);
+    assert.equal(store.lastValidation?.workQueueItemId, "work-item-1");
 
     const claimResponse = await fetch(`${baseUrl}/v1/execution-leases/claim`, {
       method: "POST",
