@@ -1,0 +1,44 @@
+schema_version: 1
+id: ADP-005
+title: Durable Work Queue and Execution Leases
+type: execution-safety-foundation
+status: implementing
+risk: R3
+origin:
+  type: founder_request
+  issue: 10
+authority:
+  decision_owner: founder
+  implementation_mode: governed
+  founder_approval_required_before_merge: false
+scope:
+  in_scope:
+    - durable_project_scoped_work_queue
+    - explicit_execution_policy_priority_status_waiting_reason
+    - stable_project_scoped_idempotency_keys
+    - atomic_postgresql_lease_claiming
+    - lease_heartbeat_release_completion
+    - expired_lease_recovery
+    - append_only_execution_attempt_history
+    - internal_queue_and_lease_api
+    - queue_status_observability
+    - deterministic_and_postgresql_invariant_tests
+  out_of_scope:
+    - ai_provider_calls
+    - automatic_ai_dispatch
+    - budget_governor
+    - freshness_authority_validation
+    - claude_verification
+    - automatic_merge
+    - production_release
+activation:
+  current_level: A1
+  resulting_level: A1
+  capabilities_enabled_by_this_change: []
+implementation:
+  branch: change/ADP-005-durable-queue-leases
+  issue: 10
+artifacts:
+  specification: specification.md
+  acceptance_criteria: acceptance-criteria.md
+  implementation_plan: implementation-plan.md
