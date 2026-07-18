@@ -58,16 +58,7 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Run deterministic TypeScript and unit checks
-        id: deterministic_checks
-        run: npm run check 2>&1 | tee deterministic-check.log
-
-      - name: Upload deterministic check diagnostics
-        if: failure() && steps.deterministic_checks.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: deterministic-check-diagnostics
-          path: deterministic-check.log
-          retention-days: 1
+        run: npm run check
 
       - name: Validate development Compose configuration
         env:
@@ -82,30 +73,10 @@ jobs:
         run: docker compose -f deploy/development/compose.yaml config >/dev/null
 
       - name: Build development Control Plane image
-        id: docker_build
-        run: docker build --progress=plain --target runtime -t karsift-autodev-control-plane:ci . 2>&1 | tee docker-build.log
-
-      - name: Upload Docker build diagnostics
-        if: failure() && steps.docker_build.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-build-diagnostics
-          path: docker-build.log
-          retention-days: 1
+        run: docker build --target runtime -t karsift-autodev-control-plane:ci .
 
       - name: Apply PostgreSQL migration
-        id: apply_migration
-        run: |
-          set -o pipefail
-          npm run migrate 2>&1 | tee migration.log
-
-      - name: Upload migration diagnostics
-        if: failure() && steps.apply_migration.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: migration-diagnostics
-          path: migration.log
-          retention-days: 1
+        run: npm run migrate
 
       - name: Re-run migration to prove idempotency
         run: npm run migrate
