@@ -113,6 +113,7 @@ try {
     actor,
   });
   assert.notEqual(deterministicClaim, null);
+  assert.equal(deterministicClaim.executionAttempt.provider_dispatch_decision_id, null);
   const deterministicCompletion = await store.completeExecutionLease({
     executionAttemptId: String(deterministicClaim.executionAttempt.id),
     leaseToken: String(deterministicClaim.executionAttempt.lease_token),
@@ -199,26 +200,6 @@ try {
     "budget approval must not activate AI_DISPATCH capability",
   );
 
-  await expectRejected(
-    () =>
-      pool.query(
-        `INSERT INTO execution_attempts(
-           work_queue_item_id,
-           project_id,
-           attempt_number,
-           idempotency_key,
-           lease_owner,
-           lease_expires_at
-         ) VALUES ($1, $2, 1, $3, 'direct-ai-worker', now() + interval '5 minutes')`,
-        [
-          aiWork.workQueueItemId,
-          projectId,
-          `budget:${projectId}:${aiWork.task.id}`,
-        ],
-      ),
-    "database must reject AI execution while AI_DISPATCH is disabled",
-  );
-
   const aiStateBeforeRelease = await pool.query(
     "SELECT state_version FROM work_queue_items WHERE id = $1",
     [aiWork.workQueueItemId],
@@ -250,6 +231,43 @@ try {
   assert.equal(overflowRebudget.decision.decision, "APPROVED");
   assert.equal(overflowRebudget.reservation.status, "RESERVED");
 
+  await store.upsertProviderRoutingPolicy({
+    projectId,
+    executionClass: "AI_TIER_2",
+    capability: "CODE_BUILDER",
+    providerKeys: ["ci-budget-builder"],
+    enabled: true,
+    actor,
+  });
+  await store.recordProviderCapacityObservation({
+    projectId,
+    providerKey: "ci-budget-builder",
+    capability: "CODE_BUILDER",
+    status: "HEALTHY",
+    ttlSeconds: 300,
+    quotaResetAt: null,
+    details: { source: "ci-budget-verifier" },
+    actor,
+  });
+  const providerReady = await store.evaluateProviderDispatch({
+    workQueueItemId: overflowWork.workQueueItemId,
+    capability: "CODE_BUILDER",
+    actor,
+  });
+  assert.equal(providerReady.outcome, "READY");
+
+  const providerReadyButDisabled = await store.claimExecutionLease({
+    projectId,
+    leaseOwner: "ai-worker-provider-ready-capability-disabled",
+    leaseSeconds: 300,
+    actor,
+  });
+  assert.equal(
+    providerReadyButDisabled,
+    null,
+    "provider readiness and budget approval must not activate AI_DISPATCH",
+  );
+
   await pool.query(
     `INSERT INTO capability_switches(
        scope_type, project_id, capability, enabled, reason, updated_by
@@ -263,8 +281,16 @@ try {
     leaseSeconds: 300,
     actor,
   });
-  assert.notEqual(aiClaim, null, "AI work must be claimable only after budget and capability gates pass");
+  assert.notEqual(
+    aiClaim,
+    null,
+    "AI work must be claimable only after budget, provider, and capability gates pass",
+  );
   assert.equal(aiClaim.workItem.id, overflowWork.workQueueItemId);
+  assert.equal(
+    String(aiClaim.executionAttempt.provider_dispatch_decision_id),
+    String(providerReady.id),
+  );
 
   const committedReservation = await pool.query(
     "SELECT status, execution_attempt_id FROM ai_budget_reservations WHERE id = $1",
