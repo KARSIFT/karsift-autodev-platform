@@ -11,7 +11,9 @@ import { attachRepositoryWorkspaceRoute } from "./http/repository-workspace-rout
 import { createControlPlaneServer } from "./http/server.js";
 import { attachTaskContextPackRoute } from "./http/task-context-pack-route.js";
 import { attachWorkspaceCommandRoute } from "./http/workspace-command-route.js";
+import { attachWorkspaceMutationRoute } from "./http/workspace-mutation-route.js";
 import { createRepositoryWorkspaceRuntime } from "./repository/repository-workspace-runtime.js";
+import { createWorkspaceMutationRuntime } from "./repository/workspace-mutation-runtime.js";
 import { BuilderRuntimeService } from "./services/builder-runtime-service.js";
 import { ExtendedPostgresControlPlaneStore } from "./store/extended-postgres-store.js";
 
@@ -26,6 +28,7 @@ const builderRuntimeService = new BuilderRuntimeService(
 );
 const repositoryWorkspaceRuntime = createRepositoryWorkspaceRuntime(pool);
 const workspaceCommandRuntime = createWorkspaceCommandRuntime(pool);
+const workspaceMutationRuntime = createWorkspaceMutationRuntime(pool);
 const server = createControlPlaneServer(config, store);
 attachContractAuthorizationRoute(server, config, store);
 attachAiBudgetRoute(server, config, store);
@@ -43,6 +46,12 @@ attachWorkspaceCommandRoute(
   config,
   workspaceCommandRuntime.store,
   workspaceCommandRuntime.service,
+);
+attachWorkspaceMutationRoute(
+  server,
+  config,
+  workspaceMutationRuntime.store,
+  workspaceMutationRuntime.service,
 );
 
 async function shutdown(signal: string): Promise<void> {

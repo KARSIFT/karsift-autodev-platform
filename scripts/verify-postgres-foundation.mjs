@@ -60,6 +60,9 @@ try {
     "workspace_command_plans",
     "workspace_command_policies",
     "workspace_command_runs",
+    "workspace_mutation_evidence",
+    "workspace_mutation_plans",
+    "workspace_mutation_runs",
   ].sort();
 
   const tables = await client.query(
@@ -92,6 +95,7 @@ try {
       "0009_atomic_builder_dispatch.sql",
       "0010_repository_workspaces.sql",
       "0011_workspace_commands.sql",
+      "0012_workspace_mutations.sql",
     ],
     "all foundation migrations must be recorded exactly once",
   );
