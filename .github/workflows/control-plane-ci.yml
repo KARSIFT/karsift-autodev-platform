@@ -95,7 +95,9 @@ jobs:
 
       - name: Apply PostgreSQL migration
         id: apply_migration
-        run: npm run migrate 2>&1 | tee migration.log
+        run: |
+          set -o pipefail
+          npm run migrate 2>&1 | tee migration.log
 
       - name: Upload migration diagnostics
         if: failure() && steps.apply_migration.outcome == 'failure'
