@@ -25,8 +25,9 @@ test("builder proposal migration preserves dispatch authority and immutable evid
   assert.match(migration, /builder_proposal_evidence_binding_gate/);
   assert.match(migration, /builder_proposal_one_generating_per_invocation_idx/);
   assert.match(migration, /claim_row\.status <> 'ACTIVE'/);
+  assert.match(migration, /revalidation_row\.builder_dispatch_claim_id <> NEW\.builder_dispatch_claim_id/);
   assert.match(migration, /revalidation_row\.outcome <> 'READY'/);
-  assert.match(migration, /revalidation_row\.selected_provider_key <> request_row\.provider_key/);
+  assert.match(migration, /revalidation_row\.provider_key <> request_row\.provider_key/);
   assert.match(migration, /OLD\.status = 'PREPARED' AND NEW\.status = 'GENERATING'/);
   assert.match(migration, /OLD\.status = 'GENERATING'/);
 });
