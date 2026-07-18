@@ -1,0 +1,81 @@
+name: Control Plane CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: control-plane-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Exact toolchain and PostgreSQL validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_DB: autodev
+          POSTGRES_USER: autodev
+          POSTGRES_PASSWORD: autodev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U autodev -d autodev"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://autodev:autodev@127.0.0.1:5432/autodev
+      INTERNAL_API_TOKEN: ci-internal-token-not-for-production
+      FOUNDER_API_TOKEN: ci-founder-token-not-for-production
+
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v6
+
+      - name: Set up exact Node.js runtime
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          package-manager-cache: false
+
+      - name: Record runtime versions
+        run: |
+          node --version
+          npm --version
+
+      - name: Generate dependency lock candidate
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Upload dependency lock candidate
+        uses: actions/upload-artifact@v5
+        with:
+          name: adp-002-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Install exact locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run deterministic TypeScript and unit checks
+        run: npm run check
+
+      - name: Apply PostgreSQL migration
+        run: npm run migrate
+
+      - name: Re-run migration to prove idempotency
+        run: npm run migrate
+
+      - name: Verify PostgreSQL foundation invariants
+        run: npm run verify:postgres
