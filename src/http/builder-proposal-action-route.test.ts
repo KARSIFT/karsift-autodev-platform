@@ -57,7 +57,10 @@ class FakeService {
     builderProposalRunId: string;
     commandPolicyKey: string | null;
   }) {
-    this.materialized.push(input);
+    this.materialized.push({
+      builderProposalRunId: input.builderProposalRunId,
+      commandPolicyKey: input.commandPolicyKey,
+    });
     return { id: "action-run-1", status: "MATERIALIZED" };
   }
 
