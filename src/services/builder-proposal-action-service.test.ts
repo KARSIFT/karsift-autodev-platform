@@ -25,7 +25,14 @@ function proposal(action: BuilderProposal["action"]): BuilderProposal {
         : [],
     mutations:
       action === "PROPOSE_MUTATIONS"
-        ? [{ operation: "UPDATE", path: "src/index.ts", beforeHash: "a".repeat(64), content: "next" }]
+        ? [
+            {
+              type: "UPDATE",
+              path: "src/index.ts",
+              expectedBeforeHash: "a".repeat(64),
+              content: "next",
+            },
+          ]
         : [],
     blockingReason: action === "BLOCKED" ? "blocked" : null,
   };
