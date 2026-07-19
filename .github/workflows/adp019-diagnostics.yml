@@ -1,0 +1,34 @@
+name: ADP-019 Diagnostics
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics:
+    if: github.head_ref == 'change/ADP-019-builder-session-controller'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Capture deterministic check output
+        id: check
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee adp019-check.log
+      - name: Upload diagnostics
+        if: failure() && steps.check.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: adp019-deterministic-check-diagnostics
+          path: adp019-check.log
+          retention-days: 1
