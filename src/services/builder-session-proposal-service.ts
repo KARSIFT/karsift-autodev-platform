@@ -5,13 +5,6 @@ import type { BuilderProposalStore } from "../store/builder-proposal-types.js";
 import type { BuilderDispatchStore } from "../store/builder-runtime-types.js";
 import type { Actor } from "../store/types.js";
 
-function recordField(value: unknown, field: string): Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`Builder session proposal response ${field} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`Builder session proposal response ${field} must be a non-empty string`);
