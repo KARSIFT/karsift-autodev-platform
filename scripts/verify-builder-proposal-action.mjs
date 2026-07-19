@@ -116,6 +116,17 @@ try {
     String(firstActionA.evidence.result_hash),
   );
 
+  await pool.query(
+    `UPDATE capability_switches
+        SET enabled = true,
+            reason = 'CI-only second-turn proposal dispatch proof',
+            updated_by = 'ci-builder-proposal-action-verifier'
+      WHERE scope_type = 'PROJECT'
+        AND project_id = $1
+        AND capability = 'AI_DISPATCH'`,
+    [fixture.project_id],
+  );
+
   const generatedSecond = await proposalService.generate({
     builderProposalRunId: String(secondProposal.run.id),
     claimOwner: "ci-builder-proposal-action-turn-2",
@@ -123,6 +134,17 @@ try {
     actor,
   });
   assert.equal(generatedSecond.status, "GENERATED");
+
+  await pool.query(
+    `UPDATE capability_switches
+        SET enabled = false,
+            reason = 'CI second-turn proposal dispatch proof complete',
+            updated_by = 'ci-builder-proposal-action-verifier'
+      WHERE scope_type = 'PROJECT'
+        AND project_id = $1
+        AND capability = 'AI_DISPATCH'`,
+    [fixture.project_id],
+  );
 
   const secondAction = await actionService.authorizeAndMaterialize({
     builderProposalRunId: String(secondProposal.run.id),
@@ -167,6 +189,14 @@ try {
     [fixture.builder_invocation_id],
   );
   assert.equal(activeActions.rows[0].count, 0);
+
+  const globalDispatch = await pool.query(
+    `SELECT enabled
+       FROM capability_switches
+      WHERE scope_type = 'GLOBAL'
+        AND capability = 'AI_DISPATCH'`,
+  );
+  assert.equal(globalDispatch.rows[0].enabled, false);
 
   console.log("Builder proposal action orchestration invariants verified successfully.");
 } finally {
