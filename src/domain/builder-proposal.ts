@@ -46,6 +46,8 @@ export interface BuilderProposalRequestContentInput {
   readonly relevantPaths: readonly string[];
   readonly taskContextPackContent: JsonValue;
   readonly sourceSnapshotContent: JsonValue;
+  readonly previousActionEvidenceId?: string | null;
+  readonly previousActionEvidenceHash?: string | null;
 }
 
 const MAX_SUMMARY_CHARS = 4_000;
@@ -181,6 +183,19 @@ export function buildBuilderProposalRequestContent(
       throw new Error(`${field} must be a lowercase SHA-256 hash`);
     }
   }
+  const previousActionEvidenceId = input.previousActionEvidenceId ?? null;
+  const previousActionEvidenceHash = input.previousActionEvidenceHash ?? null;
+  if ((previousActionEvidenceId === null) !== (previousActionEvidenceHash === null)) {
+    throw new Error(
+      "previous action evidence id and hash must either both be present or both be null",
+    );
+  }
+  if (
+    previousActionEvidenceHash !== null &&
+    !/^[a-f0-9]{64}$/.test(previousActionEvidenceHash)
+  ) {
+    throw new Error("previousActionEvidenceHash must be a lowercase SHA-256 hash");
+  }
   return {
     projectId: input.projectId,
     builderInvocationId: input.builderInvocationId,
@@ -196,6 +211,12 @@ export function buildBuilderProposalRequestContent(
     relevantPaths: [...input.relevantPaths],
     taskContextPackContent: input.taskContextPackContent,
     sourceSnapshotContent: input.sourceSnapshotContent,
+    previousActionEvidence: previousActionEvidenceId === null
+      ? null
+      : {
+          id: previousActionEvidenceId,
+          resultHash: previousActionEvidenceHash,
+        },
   };
 }
 

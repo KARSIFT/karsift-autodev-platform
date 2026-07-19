@@ -122,3 +122,6 @@ jobs:
 
       - name: Verify structured builder proposal lifecycle
         run: npm run verify:builder-proposal
+
+      - name: Verify bounded proposal action orchestration
+        run: npm run verify:builder-proposal-action

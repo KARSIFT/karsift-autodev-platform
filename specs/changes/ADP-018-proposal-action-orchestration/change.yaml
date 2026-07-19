@@ -1,0 +1,33 @@
+schema_version: 1
+change_id: ADP-018
+title: Proposal Action Authorization and Bounded Turn Orchestration
+status: implementing
+risk_level: R3
+issue: 38
+base_branch: develop
+change_branch: change/ADP-018-proposal-action-orchestration
+autonomy_level: A1
+founder_approval_required: false
+capabilities_enabled: []
+capabilities_explicitly_disabled:
+  - LIVE_AI_PROVIDER
+  - REMOTE_REPOSITORY_WRITE
+  - AUTOMATIC_MERGE
+  - DEPLOYMENT
+  - PRODUCTION_RELEASE
+  - INCIDENT_REPAIR
+authority:
+  source: issue-38
+  actor: system
+scope:
+  - immutable proposal-action decisions
+  - strict routing through existing governed context, command, and mutation boundaries
+  - finite proposal turn accounting
+  - fresh-result evidence before later turns
+  - append-only orchestration evidence
+out_of_scope:
+  - live provider calls
+  - direct proposal execution
+  - recursive unbounded loops
+  - remote git publication
+  - merge or deployment authority
