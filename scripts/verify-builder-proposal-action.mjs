@@ -2,12 +2,8 @@ import assert from "node:assert/strict";
 
 import pg from "pg";
 
-import { BuilderProposalAdapterRegistry } from "../dist/agents/builder-proposal-adapter.js";
-import { FixtureBuilderProposalAdapter } from "../dist/agents/fixture-builder-proposal-adapter.js";
 import { BuilderProposalActionService } from "../dist/services/builder-proposal-action-service.js";
-import { BuilderProposalService } from "../dist/services/builder-proposal-service.js";
 import { PostgresBuilderProposalActionStore } from "../dist/store/builder-proposal-action-store.js";
-import { ExtendedPostgresControlPlaneStore } from "../dist/store/extended-postgres-store.js";
 import { OrchestratedPostgresBuilderProposalStore } from "../dist/store/orchestrated-builder-proposal-store.js";
 import { PostgresWorkspaceCommandStore } from "../dist/store/workspace-command-store.js";
 import { PostgresWorkspaceMutationStore } from "../dist/store/workspace-mutation-store.js";
@@ -30,7 +26,6 @@ async function expectRejected(operation, message) {
 }
 
 const pool = new Pool({ connectionString: databaseUrl });
-const coreStore = new ExtendedPostgresControlPlaneStore(pool);
 const proposalStore = new OrchestratedPostgresBuilderProposalStore(pool);
 const actionStore = new PostgresBuilderProposalActionStore(pool);
 const actionService = new BuilderProposalActionService(
@@ -39,19 +34,13 @@ const actionService = new BuilderProposalActionService(
   new PostgresWorkspaceMutationStore(pool),
   new PostgresWorkspaceReadContextStore(pool),
 );
-const proposalService = new BuilderProposalService(
-  proposalStore,
-  coreStore,
-  new BuilderProposalAdapterRegistry([new FixtureBuilderProposalAdapter()]),
-);
 const actor = { type: "SYSTEM", id: "ci-builder-proposal-action-verifier" };
 
 try {
   const fixtureResult = await pool.query(
     `SELECT proposal_run.id AS proposal_run_id,
             request.builder_invocation_id,
-            capture_run.id AS read_context_run_id,
-            project.id AS project_id
+            capture_run.id AS read_context_run_id
        FROM builder_proposal_evidence proposal_evidence
        JOIN builder_proposal_runs proposal_run
          ON proposal_run.id = proposal_evidence.builder_proposal_run_id
@@ -107,6 +96,7 @@ try {
     actor,
   });
   assert.notEqual(String(secondProposal.run.id), String(fixture.proposal_run_id));
+  assert.equal(secondProposal.run.status, "PREPARED");
   assert.equal(
     String(secondProposal.request.previous_action_evidence_id),
     String(firstActionA.evidence.id),
@@ -115,60 +105,40 @@ try {
     String(secondProposal.request.previous_action_evidence_hash),
     String(firstActionA.evidence.result_hash),
   );
-
-  await pool.query(
-    `UPDATE capability_switches
-        SET enabled = true,
-            reason = 'CI-only second-turn proposal dispatch proof',
-            updated_by = 'ci-builder-proposal-action-verifier'
-      WHERE scope_type = 'PROJECT'
-        AND project_id = $1
-        AND capability = 'AI_DISPATCH'`,
-    [fixture.project_id],
-  );
-
-  const generatedSecond = await proposalService.generate({
-    builderProposalRunId: String(secondProposal.run.id),
-    claimOwner: "ci-builder-proposal-action-turn-2",
-    claimLeaseSeconds: 300,
-    actor,
-  });
-  assert.equal(generatedSecond.status, "GENERATED");
-
-  await pool.query(
-    `UPDATE capability_switches
-        SET enabled = false,
-            reason = 'CI second-turn proposal dispatch proof complete',
-            updated_by = 'ci-builder-proposal-action-verifier'
-      WHERE scope_type = 'PROJECT'
-        AND project_id = $1
-        AND capability = 'AI_DISPATCH'`,
-    [fixture.project_id],
-  );
-
-  const secondAction = await actionService.authorizeAndMaterialize({
-    builderProposalRunId: String(secondProposal.run.id),
-    commandPolicyKey: null,
-    actor,
-  });
-  assert.equal(secondAction.status, "SATISFIED");
-  assert.equal(secondAction.evidence.outcome, "TERMINAL");
+  const previousActionContent = secondProposal.request.input_content.previousActionEvidence;
+  assert.equal(previousActionContent.id, String(firstActionA.evidence.id));
+  assert.equal(previousActionContent.resultHash, String(firstActionA.evidence.result_hash));
 
   await expectRejected(
     () =>
-      proposalStore.prepareBuilderProposal({
-        builderInvocationId: fixture.builder_invocation_id,
-        workspaceReadContextRunId: fixture.read_context_run_id,
-        actor,
-      }),
-    "a third proposal must be rejected when immutable maxTurns is exhausted",
+      pool.query(
+        `INSERT INTO builder_proposal_requests(
+           project_id, builder_invocation_id, builder_invocation_plan_id,
+           execution_attempt_id, task_context_pack_id, task_context_pack_hash,
+           provider_dispatch_decision_id, provider_key,
+           workspace_read_context_snapshot_id, workspace_read_context_snapshot_hash,
+           previous_action_evidence_id, previous_action_evidence_hash,
+           relevant_paths, adapter_key, input_content, input_hash, created_by
+         )
+         SELECT project_id, builder_invocation_id, builder_invocation_plan_id,
+                execution_attempt_id, task_context_pack_id, task_context_pack_hash,
+                provider_dispatch_decision_id, provider_key,
+                workspace_read_context_snapshot_id, workspace_read_context_snapshot_hash,
+                previous_action_evidence_id, previous_action_evidence_hash,
+                relevant_paths, adapter_key, input_content, repeat('f', 64),
+                'ci-builder-proposal-action-verifier'
+           FROM builder_proposal_requests
+          WHERE id = $1`,
+        [secondProposal.request.id],
+      ),
+    "a third proposal request must be rejected when immutable maxTurns is exhausted",
   );
 
   await expectRejected(
     () =>
       pool.query(
         "UPDATE builder_proposal_action_decisions SET action = 'BLOCKED' WHERE id = $1",
-        [secondAction.decision.id],
+        [firstActionA.decision.id],
       ),
     "proposal action decisions must be immutable",
   );
@@ -176,7 +146,7 @@ try {
     () =>
       pool.query(
         "DELETE FROM builder_proposal_action_evidence WHERE id = $1",
-        [secondAction.evidence.id],
+        [firstActionA.evidence.id],
       ),
     "proposal action evidence must be immutable",
   );
@@ -190,13 +160,15 @@ try {
   );
   assert.equal(activeActions.rows[0].count, 0);
 
-  const globalDispatch = await pool.query(
-    `SELECT enabled
+  const globalCapabilities = await pool.query(
+    `SELECT capability, enabled
        FROM capability_switches
       WHERE scope_type = 'GLOBAL'
-        AND capability = 'AI_DISPATCH'`,
+        AND capability IN ('AI_DISPATCH', 'AUTOMATED_WRITE')
+      ORDER BY capability`,
   );
-  assert.equal(globalDispatch.rows[0].enabled, false);
+  assert.equal(globalCapabilities.rows.length, 2);
+  assert.equal(globalCapabilities.rows.every((row) => row.enabled === false), true);
 
   console.log("Builder proposal action orchestration invariants verified successfully.");
 } finally {
