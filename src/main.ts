@@ -1,6 +1,7 @@
 import { BuilderAdapterRegistry } from "./agents/builder-adapter.js";
 import { createBuilderProposalActionRuntime } from "./agents/builder-proposal-action-runtime.js";
 import { createBuilderProposalRuntime } from "./agents/builder-proposal-runtime.js";
+import { createBuilderSessionRuntime } from "./agents/builder-session-runtime.js";
 import { DryRunBuilderAdapter } from "./agents/dry-run-builder-adapter.js";
 import { createWorkspaceCommandRuntime } from "./commands/workspace-command-runtime.js";
 import { loadConfig } from "./config.js";
@@ -9,6 +10,7 @@ import { attachAiBudgetRoute } from "./http/ai-budget-route.js";
 import { attachBuilderProposalActionRoute } from "./http/builder-proposal-action-route.js";
 import { attachBuilderProposalRoute } from "./http/builder-proposal-route.js";
 import { attachBuilderRuntimeRoute } from "./http/builder-runtime-route.js";
+import { attachBuilderSessionRoute } from "./http/builder-session-route.js";
 import { attachContractAuthorizationRoute } from "./http/contract-authorization-route.js";
 import { attachProviderDispatchRoute } from "./http/provider-dispatch-route.js";
 import { attachRepositoryWorkspaceRoute } from "./http/repository-workspace-route.js";
@@ -43,6 +45,20 @@ const builderProposalActionRuntime = createBuilderProposalActionRuntime(
   workspaceMutationRuntime.store,
   workspaceReadContextRuntime.store,
 );
+const builderSessionRuntime = createBuilderSessionRuntime({
+  pool,
+  proposalStore: builderProposalRuntime.store,
+  proposalAdapters: builderProposalRuntime.adapters,
+  dispatchStore: store,
+  workQueueStore: store,
+  actionService: builderProposalActionRuntime.service,
+  commandStore: workspaceCommandRuntime.store,
+  commandService: workspaceCommandRuntime.service,
+  mutationStore: workspaceMutationRuntime.store,
+  mutationService: workspaceMutationRuntime.service,
+  readContextStore: workspaceReadContextRuntime.store,
+  readContextService: workspaceReadContextRuntime.service,
+});
 const server = createControlPlaneServer(config, store);
 attachContractAuthorizationRoute(server, config, store);
 attachAiBudgetRoute(server, config, store);
@@ -84,6 +100,12 @@ attachBuilderProposalActionRoute(
   config,
   builderProposalActionRuntime.store,
   builderProposalActionRuntime.service,
+);
+attachBuilderSessionRoute(
+  server,
+  config,
+  builderSessionRuntime.store,
+  builderSessionRuntime.service,
 );
 
 async function shutdown(signal: string): Promise<void> {
