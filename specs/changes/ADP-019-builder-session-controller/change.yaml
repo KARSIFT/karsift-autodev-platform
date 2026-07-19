@@ -1,0 +1,18 @@
+id: ADP-019
+slug: builder-session-controller
+title: Durable Builder Session and Stepwise Turn Controller
+status: proposed
+risk: R3
+base_branch: develop
+change_branch: change/ADP-019-builder-session-controller
+issue: 40
+activation:
+  level: A1
+  autonomous_capabilities_enabled: []
+constraints:
+  - one durable session per builder invocation
+  - one bounded controller step per request
+  - no raw proposal execution
+  - no live external provider adapter
+  - no remote git publication
+  - no automatic merge or deployment
